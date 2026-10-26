@@ -1,0 +1,112 @@
+/* All styles are scoped to this extension, never to SillyTavern's own chat. */
+#stmn-root {
+    --stmn-accent: var(--SmartThemeQuoteColor, #99b9ef);
+    --stmn-bg: var(--SmartThemeBlurTintColor, #252833);
+    --stmn-fg: var(--SmartThemeBodyColor, #f0f0f0);
+    --stmn-border: var(--SmartThemeBorderColor, #727785);
+    --stmn-nav-left: calc(100vw - 55px);
+    --stmn-panel-left: max(8px, calc(100vw - 397px));
+    --stmn-mid: 50%;
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3100;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--stmn-fg);
+    box-sizing: border-box;
+}
+#stmn-root *, #stmn-settings * { box-sizing: border-box; }
+#stmn-root .stmn-nav {
+    position: fixed;
+    left: var(--stmn-nav-left);
+    top: var(--stmn-mid);
+    transform: translateY(-50%);
+    display: flex;
+    flex-flow: column nowrap;
+    align-items: center;
+    gap: 7px;
+    pointer-events: auto;
+    max-height: calc(100dvh - 100px);
+    z-index: 1;
+}
+#stmn-root .stmn-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
+    border-radius: 50%;
+    border: 1px solid var(--stmn-border);
+    color: var(--stmn-fg);
+    background: var(--stmn-bg);
+    box-shadow: 0 2px 9px #0003;
+    cursor: pointer;
+    opacity: .92;
+    transition: opacity .12s ease, background-color .12s ease;
+}
+#stmn-root .stmn-button:hover:not(:disabled),
+#stmn-root .stmn-button-selected { background: var(--stmn-accent); color: #161719; opacity: 1; }
+#stmn-root .stmn-button:disabled { cursor: default; opacity: .35; }
+#stmn-root button:focus-visible, #stmn-root input:focus-visible { outline: 2px solid var(--stmn-accent); outline-offset: 2px; }
+#stmn-root .stmn-outline {
+    position: fixed;
+    top: 8vh;
+    left: var(--stmn-panel-left);
+    width: min(330px, calc(100vw - 24px));
+    height: min(84dvh, 850px);
+    min-height: 240px;
+    background: var(--stmn-bg);
+    border: 1px solid var(--stmn-border);
+    border-radius: 20px;
+    box-shadow: 0 8px 35px #0009;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    pointer-events: auto;
+    backdrop-filter: blur(10px);
+}
+#stmn-root .stmn-outline[hidden] { display: none !important; }
+#stmn-root .stmn-outline-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 13px 0 16px; }
+#stmn-root .stmn-heading { font-size: 16px; }
+#stmn-root .stmn-outline-header .stmn-close { width: 30px; min-width: 30px; height: 30px; min-height: 30px; box-shadow: none; }
+#stmn-root .stmn-count { padding: 0 16px; margin: 2px 0 8px; font-size: 12px; opacity: .72; }
+#stmn-root .stmn-search { margin: 0 12px 10px; display: flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid var(--stmn-border); border-radius: 10px; }
+#stmn-root .stmn-search-input { flex: 1; width: 0; min-width: 0; background: transparent; border: 0; color: inherit; outline: none; box-shadow: none; height: 28px; padding: 0; }
+#stmn-root .stmn-list { min-height: 0; flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+#stmn-root .stmn-list-spacer { position: relative; width: 100%; }
+#stmn-root .stmn-row { position: absolute; left: 0; right: 0; height: 68px; padding: 8px 9px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid color-mix(in srgb, var(--stmn-border), transparent 50%); }
+#stmn-root .stmn-row.stmn-current { border-left: 3px solid var(--stmn-accent); padding-left: 6px; background: color-mix(in srgb, var(--stmn-accent), transparent 91%); }
+#stmn-root .stmn-hidden-message { opacity: .57; }
+#stmn-root .stmn-number { width: 34px; min-width: 34px; text-align: right; font-size: 10px; opacity: .72; font-variant-numeric: tabular-nums; }
+#stmn-root .stmn-avatar { position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden; border: 1px solid var(--stmn-border); border-radius: 50%; width: 32px; height: 32px; min-width: 32px; background: #6e7482; color: white; font-size: 12px; }
+#stmn-root .stmn-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+#stmn-root .stmn-row-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+#stmn-root .stmn-title { display: block; width: 100%; border: none; background: transparent; padding: 0; margin: 0; text-align: left; line-height: 1.35; font-size: 13px; font-weight: 500; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+#stmn-root .stmn-title:hover { color: var(--stmn-accent); text-decoration: underline; }
+#stmn-root .stmn-row-detail { font-size: 10px; opacity: .65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#stmn-root .stmn-row-action { display: flex; justify-content: center; align-items: center; width: 25px; min-width: 25px; height: 28px; padding: 3px; margin: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; opacity: .75; cursor: pointer; }
+#stmn-root .stmn-row-action:hover { opacity: 1; color: var(--stmn-accent); background: #8882; }
+#stmn-root .stmn-row-action svg { width: 15px; }
+#stmn-root .stmn-edit-input { width: 100%; min-width: 0; height: 28px; padding: 4px; border: 1px solid var(--stmn-accent); border-radius: 6px; background: #1118; color: inherit; }
+#stmn-root .stmn-edit-help { font-size: 9px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#stmn-root .stmn-footer { min-height: 28px; padding: 6px 12px; font-size: 11px; opacity: .8; border-top: 1px solid var(--stmn-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#stmn-root .stmn-footer.stmn-error { color: #ff9999; opacity: 1; }
+#stmn-settings { margin: 6px 0; padding: 9px; border: 1px solid var(--SmartThemeBorderColor, #777); border-radius: 8px; }
+#stmn-settings summary { font-weight: 600; cursor: pointer; }
+#stmn-settings .stmn-settings-inner { display: grid; gap: 6px; padding: 12px 6px 4px; }
+#stmn-settings label { margin-top: 8px; }
+#stmn-settings select { max-width: 100%; width: 100%; }
+#stmn-settings .stmn-settings-hint { font-size: 12px; opacity: .75; line-height: 1.5; }
+@media (max-width: 600px) {
+    #stmn-root .stmn-nav { gap: 5px; top: 52%; }
+    #stmn-root .stmn-button { width: 36px; min-width: 36px; height: 36px; min-height: 36px; }
+    #stmn-root .stmn-outline { top: 9vh; height: min(82dvh, 710px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #stmn-root .stmn-button { transition: none; }
+}
