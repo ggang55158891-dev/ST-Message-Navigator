@@ -37,13 +37,52 @@ export function getCurrentIndex(chatElement, chatLength) {
     return Number.isInteger(id) && id >= 0 && id < chatLength ? id : chatLength - 1;
 }
 
+/**
+ * Keep explicit navigation independent of the viewport's first visible row.
+ * At the bottom of a chat the browser clamps scrollTop, so the intended row
+ * can be visible while its predecessor still occupies the top of the viewport.
+ * In that situation getCurrentIndex() alone would skip a message on "previous".
+ * Once the scroll position changes (manual scrolling), resume DOM detection.
+ */
+export class NavigationCursor {
+    constructor() {
+        this.clear();
+    }
+
+    clear() {
+        this.index = -1;
+        this.scrollTop = null;
+    }
+
+    set(chatElement, index) {
+        if (!chatElement || !Number.isInteger(index) || index < 0) {
+            this.clear();
+            return;
+        }
+        this.index = index;
+        this.scrollTop = chatElement.scrollTop;
+    }
+
+    resolve(chatElement, chatLength) {
+        if (this.index >= 0 && this.index < chatLength &&
+            chatElement && Number.isFinite(this.scrollTop) &&
+            Math.abs(chatElement.scrollTop - this.scrollTop) <= 2) {
+            return this.index;
+        }
+        this.clear();
+        return getCurrentIndex(chatElement, chatLength);
+    }
+}
+
 export function scrollToMessage(chatElement, element) {
     if (!element || !chatElement) return false;
     const box = element.getBoundingClientRect();
     if (box.height < 1) return false;
     const root = chatElement.getBoundingClientRect();
-    const next = chatElement.scrollTop + box.top - root.top - 12;
-    chatElement.scrollTo({ top: Math.max(0, next), behavior: 'auto' });
+    const next = chatElement.scrollTop + box.top - root.top - (chatElement.clientTop || 0) - 12;
+    // 'auto' may inherit scroll-behavior:smooth from a theme.  'instant' makes
+    // the scroll position stable before the navigation anchor is recorded.
+    chatElement.scrollTo({ top: Math.max(0, next), behavior: 'instant' });
     return true;
 }
 

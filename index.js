@@ -1,5 +1,5 @@
 import { SETTINGS_KEY, assignCustomTitle, findTarget } from './model.js';
-import { ensureMessageRendered, getChatElement, getCurrentIndex, getRenderedMessage, scrollToMessage } from './scroll.js';
+import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage } from './scroll.js';
 import { installSettings, NavigatorView } from './ui.js';
 
 const PREFIX = '[ST Message Navigator]';
@@ -28,6 +28,7 @@ class NavigatorApp {
         this.navSerial = 0;
         this.busy = false;
         this.lastNavigated = -1;
+        this.cursor = new NavigationCursor();
         this.refreshTimer = null;
         this.listeners = [];
         this.chatElement = null;
@@ -68,7 +69,7 @@ class NavigatorApp {
         if (this.busy) return;
         this.bindChatScroll();
         const chat = context().chat || [];
-        const id = getCurrentIndex(this.chatElement, chat.length);
+        const id = this.cursor.resolve(this.chatElement, chat.length);
         this.lastNavigated = id;
         this.view.setActive(id);
     }
@@ -77,6 +78,7 @@ class NavigatorApp {
         const current = getChatElement();
         if (current === this.chatElement) return;
         this.chatElement?.removeEventListener('scroll', this.chatScrollHandler);
+        this.cursor.clear();
         this.chatElement = current;
         this.chatElement?.addEventListener('scroll', this.chatScrollHandler, { passive: true });
         this.resizeObserver?.disconnect();
@@ -108,6 +110,8 @@ class NavigatorApp {
         register('CHAT_CHANGED', () => {
             this.navSerial++;
             this.busy = false;
+            this.cursor.clear();
+            this.clearTargetHighlight();
             this.view.editing = -1;
             this.view.query = '';
             this.view.search.value = '';
@@ -151,7 +155,8 @@ class NavigatorApp {
 
     async navigate(action) {
         const ctx = context();
-        const base = getCurrentIndex(getChatElement(), ctx.chat?.length || 0);
+        this.bindChatScroll();
+        const base = this.cursor.resolve(this.chatElement, ctx.chat?.length || 0);
         const target = findTarget(ctx.chat || [], base, action, this.settings.mode);
         if (target >= 0) await this.goToIndex(target);
     }
@@ -172,7 +177,9 @@ class NavigatorApp {
             if (cancelled() || !chatElement) return;
             const node = getRenderedMessage(chatElement, index);
             if (!scrollToMessage(chatElement, node)) throw new Error('대상 메시지가 화면에서 숨겨져 있어 스크롤할 수 없습니다.');
+            this.cursor.set(chatElement, index);
             this.lastNavigated = index;
+            this.highlightTarget(node);
             this.view.setActive(index, true);
             this.view.setStatus(`메시지 #${index + 1}로 이동했습니다.`);
         } catch (error) {
@@ -187,6 +194,22 @@ class NavigatorApp {
                 this.view.setActive(this.lastNavigated);
             }
         }
+    }
+
+    // A short highlight removes ambiguity near the end of a chat where the
+    // selected message cannot be scrolled all the way to the top.
+    highlightTarget(node) {
+        this.clearTargetHighlight();
+        this.highlightedNode = node;
+        node.classList.add('stmn-jump-target');
+        this.highlightTimer = setTimeout(() => this.clearTargetHighlight(), 1800);
+    }
+
+    clearTargetHighlight() {
+        if (this.highlightTimer !== undefined) clearTimeout(this.highlightTimer);
+        this.highlightTimer = undefined;
+        this.highlightedNode?.classList.remove('stmn-jump-target');
+        this.highlightedNode = null;
     }
 
     async saveTitle(index, title) {
@@ -209,6 +232,8 @@ class NavigatorApp {
 
     destroy() {
         this.navSerial++;
+        this.cursor.clear();
+        this.clearTargetHighlight();
         if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
         if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
         this.resizeObserver?.disconnect();
@@ -225,7 +250,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.0.0)');
+        console.info(PREFIX, 'loaded (v1.0.1)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
