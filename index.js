@@ -1,9 +1,10 @@
 import { SETTINGS_KEY, assignCustomTitle, findTarget } from './model.js';
 import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage } from './scroll.js';
 import { installSettings, NavigatorView } from './ui.js';
+import { validNavPosition } from './position.js';
 
 const PREFIX = '[ST Message Navigator]';
-const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right' });
+const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null });
 let app;
 
 function context() { return SillyTavern.getContext(); }
@@ -19,6 +20,7 @@ function getSettings() {
     const settings = root[SETTINGS_KEY];
     if (!['visible', 'all'].includes(settings.mode)) settings.mode = 'visible';
     if (!['left', 'right'].includes(settings.side)) settings.side = 'right';
+    if (!validNavPosition(settings.position)) settings.position = null;
     return settings;
 }
 
@@ -46,6 +48,8 @@ class NavigatorApp {
             goToIndex: index => { void this.goToIndex(index); },
             canNavigate: (kind, index) => this.canNavigate(kind, index),
             saveTitle: (index, title) => this.saveTitle(index, title),
+            getPosition: () => this.settings.position,
+            savePosition: position => this.changeSetting('position', position),
         });
         this.view.position(this.settings.side);
         installSettings(context(), this.settings, (key, value) => this.changeSetting(key, value));
@@ -93,10 +97,15 @@ class NavigatorApp {
     changeSetting(key, value) {
         if (key === 'mode' && !['visible', 'all'].includes(value)) return;
         if (key === 'side' && !['left', 'right'].includes(value)) return;
+        if (key === 'position' && !validNavPosition(value)) return;
         this.settings[key] = value;
+        if (key === 'side') {
+            // Choosing left/right restores the default placement.
+            this.settings.position = null;
+            this.view.position(value);
+        }
         context().saveSettingsDebounced?.();
-        if (key === 'side') this.view.position(value);
-        this.updateCurrent();
+        if (key !== 'position') this.updateCurrent();
     }
 
     bindEvents() {
@@ -250,7 +259,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.0.1)');
+        console.info(PREFIX, 'loaded (v1.1.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
