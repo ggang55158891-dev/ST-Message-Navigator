@@ -6,7 +6,7 @@
     --stmn-border: var(--SmartThemeBorderColor, #727785);
     --stmn-nav-left: calc(100vw - 55px);
     --stmn-panel-left: max(8px, calc(100vw - 397px));
-    --stmn-mid: 50%;
+    --stmn-nav-top: 50%;
     position: fixed;
     inset: 0;
     pointer-events: none;
@@ -20,12 +20,14 @@
 #stmn-root .stmn-nav {
     position: fixed;
     left: var(--stmn-nav-left);
-    top: var(--stmn-mid);
+    top: var(--stmn-nav-top);
     transform: translateY(-50%);
     display: flex;
     flex-flow: column nowrap;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
+    touch-action: none;
+    user-select: none;
     pointer-events: auto;
     max-height: calc(100dvh - 100px);
     z-index: 1;
@@ -36,19 +38,21 @@
     justify-content: center;
     padding: 0;
     margin: 0;
-    width: 42px;
-    min-width: 42px;
-    height: 42px;
-    min-height: 42px;
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
     border-radius: 50%;
     border: 1px solid var(--stmn-border);
     color: var(--stmn-fg);
     background: var(--stmn-bg);
     box-shadow: 0 2px 9px #0003;
-    cursor: pointer;
+    cursor: grab;
+    touch-action: none;
     opacity: .92;
     transition: opacity .12s ease, background-color .12s ease;
 }
+#stmn-root .stmn-nav.stmn-dragging .stmn-button { cursor: grabbing; }
 #stmn-root .stmn-button:hover:not(:disabled),
 #stmn-root .stmn-button-selected { background: var(--stmn-accent); color: #161719; opacity: 1; }
 #stmn-root .stmn-button:disabled { cursor: default; opacity: .35; }
@@ -86,9 +90,9 @@
 #stmn-root .stmn-avatar { position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden; border: 1px solid var(--stmn-border); border-radius: 50%; width: 32px; height: 32px; min-width: 32px; background: #6e7482; color: white; font-size: 12px; }
 #stmn-root .stmn-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 #stmn-root .stmn-row-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-#stmn-root .stmn-title { display: block; width: 100%; border: none; background: transparent; padding: 0; margin: 0; text-align: left; line-height: 1.35; font-size: 13px; font-weight: 500; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+#stmn-root .stmn-title { display: block; width: 100%; border: none; background: transparent; padding: 0; margin: 0; text-align: left; line-height: 1.35; font-size: 16px; font-weight: 650; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 #stmn-root .stmn-title:hover { color: var(--stmn-accent); text-decoration: underline; }
-#stmn-root .stmn-row-detail { font-size: 10px; opacity: .65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#stmn-root .stmn-row-detail { font-size: 9px; opacity: .52; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #stmn-root .stmn-row-action { display: flex; justify-content: center; align-items: center; width: 25px; min-width: 25px; height: 28px; padding: 3px; margin: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; opacity: .75; cursor: pointer; }
 #stmn-root .stmn-row-action:hover { opacity: 1; color: var(--stmn-accent); background: #8882; }
 #stmn-root .stmn-row-action svg { width: 15px; }
@@ -103,8 +107,8 @@
 #stmn-settings select { max-width: 100%; width: 100%; }
 #stmn-settings .stmn-settings-hint { font-size: 12px; opacity: .75; line-height: 1.5; }
 @media (max-width: 600px) {
-    #stmn-root .stmn-nav { gap: 5px; top: 52%; }
-    #stmn-root .stmn-button { width: 36px; min-width: 36px; height: 36px; min-height: 36px; }
+    #stmn-root .stmn-nav { gap: 5px; }
+    #stmn-root .stmn-nav > .stmn-button { width: 34px; min-width: 34px; height: 34px; min-height: 34px; }
     #stmn-root .stmn-outline { top: 9vh; height: min(82dvh, 710px); }
 }
 @media (prefers-reduced-motion: reduce) {
