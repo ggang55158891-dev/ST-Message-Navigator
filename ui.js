@@ -1,5 +1,6 @@
 import { automaticTitle, getTitle, isCustomTitle } from './model.js';
 import { constrainNavPosition, fromRelativeNavPosition, toRelativeNavPosition } from './position.js';
+import { GROUP_SIZE, MESSAGE_ROW_HEIGHT, buildOutlineRows, filterOutlineEntries, findOutlineRow } from './outline.js';
 
 const BUTTONS = [
     ['first', '처음 메시지', 'chevrons-up'],
@@ -93,7 +94,6 @@ function avatarElement(context, message) {
     return circle;
 }
 
-const ROW_HEIGHT = 68;
 const OVERSCAN = 6;
 
 export class NavigatorView {
@@ -102,6 +102,8 @@ export class NavigatorView {
         this.panelOpen = false;
         this.entries = [];
         this.filtered = [];
+        this.displayRows = [];
+        this.groupCollapsed = new Set();
         this.query = '';
         this.editing = -1;
         this.editValue = '';
@@ -134,13 +136,29 @@ export class NavigatorView {
         searchbox.append(icon('search'));
         this.search = el('input', 'stmn-search-input');
         this.search.type = 'search';
-        this.search.placeholder = '제목 또는 메시지 검색';
+        this.search.placeholder = '제목·내용 검색 / #4 정확히 찾기';
         this.search.setAttribute('aria-label', '메시지 검색');
         this.search.addEventListener('input', () => {
             this.query = this.search.value.trim().toLocaleLowerCase();
             this.applyFilter();
         });
         searchbox.append(this.search);
+        this.groupTools = el('div', 'stmn-group-actions');
+        this.expandAllButton = el('button', 'stmn-group-action', '모두 펼치기');
+        this.expandAllButton.type = 'button';
+        this.expandAllButton.addEventListener('click', () => {
+            this.groupCollapsed.clear();
+            this.applyFilter({ resetScroll: true });
+        });
+        this.collapseAllButton = el('button', 'stmn-group-action', '모두 접기');
+        this.collapseAllButton.type = 'button';
+        this.collapseAllButton.addEventListener('click', () => {
+            this.groupCollapsed = new Set(
+                Array.from({ length: Math.ceil(this.entries.length / GROUP_SIZE) }, (_, i) => i * GROUP_SIZE),
+            );
+            this.applyFilter({ resetScroll: true });
+        });
+        this.groupTools.append(this.expandAllButton, this.collapseAllButton);
         this.list = el('div', 'stmn-list');
         this.list.setAttribute('role', 'list');
         this.spacer = el('div', 'stmn-list-spacer');
@@ -148,7 +166,7 @@ export class NavigatorView {
         this.list.addEventListener('scroll', () => this.scheduleRows(), { passive: true });
         this.footer = el('div', 'stmn-footer', '');
         this.footer.setAttribute('role', 'status');
-        this.panel.append(header, this.caption, searchbox, this.list, this.footer);
+        this.panel.append(header, this.caption, searchbox, this.groupTools, this.list, this.footer);
         this.root.append(this.nav, this.panel);
         document.body.append(this.root);
         this.onKeydown = event => {
@@ -158,6 +176,12 @@ export class NavigatorView {
         this.boundResize = () => this.position();
         window.addEventListener('resize', this.boundResize, { passive: true });
         this.installDragging();
+        this.position();
+    }
+
+    setNavigationButtonsVisible(visible) {
+        // Only show the center/outline button when the setting is off.
+        this.nav.classList.toggle('stmn-outline-only', !visible);
         this.position();
     }
 
@@ -311,13 +335,24 @@ export class NavigatorView {
             searchable: `${message?.name || ''} ${getTitle(message, context.chatMetadata)} ${String(message?.mes || '').slice(0, 1500)}`.toLocaleLowerCase(),
         }));
         this.applyFilter({ resetScroll: !keepScroll });
-        if (keepScroll) this.list.scrollTop = oldScroll;
+        if (keepScroll) {
+            this.list.scrollTop = oldScroll;
+            this.renderRows(true);
+        }
     }
 
     applyFilter({ resetScroll = true } = {}) {
-        this.filtered = this.query ? this.entries.filter(row => row.searchable.includes(this.query) || String(row.index + 1).includes(this.query)) : this.entries;
-        this.caption.textContent = `총 ${this.entries.length.toLocaleString()}개 메시지${this.query ? ` · 검색 결과 ${this.filtered.length.toLocaleString()}개` : ''}`;
-        this.spacer.style.height = `${this.filtered.length * ROW_HEIGHT}px`;
+        this.filtered = filterOutlineEntries(this.entries, this.query);
+        const layout = buildOutlineRows(
+            this.filtered, this.entries.length, this.groupCollapsed, Boolean(this.query),
+        );
+        this.displayRows = layout.rows;
+        this.caption.textContent = '총 ' + this.entries.length.toLocaleString() + '개 메시지' +
+            (this.query ? ' · 검색 결과 ' + this.filtered.length.toLocaleString() + '개' : '');
+        this.spacer.style.height = String(layout.totalHeight) + 'px';
+        this.groupTools.hidden = Boolean(this.query) || this.entries.length === 0;
+        this.expandAllButton.disabled = this.groupCollapsed.size === 0;
+        this.collapseAllButton.disabled = this.groupCollapsed.size >= Math.ceil(this.entries.length / GROUP_SIZE);
         if (resetScroll) this.list.scrollTop = 0;
         this.lastRange = '';
         this.renderRows(true);
@@ -330,24 +365,45 @@ export class NavigatorView {
 
     renderRows(force = false) {
         if (!this.panelOpen) return;
-        const start = Math.max(0, Math.floor(this.list.scrollTop / ROW_HEIGHT) - OVERSCAN);
-        const count = Math.ceil((this.list.clientHeight || 400) / ROW_HEIGHT) + OVERSCAN * 2;
-        const end = Math.min(this.filtered.length, start + count);
-        const range = `${start}:${end}:${this.editing}`;
+        const rows = this.displayRows;
+        const start = Math.max(0, findOutlineRow(rows, this.list.scrollTop) - OVERSCAN);
+        const limit = this.list.scrollTop + (this.list.clientHeight || 400) + OVERSCAN * MESSAGE_ROW_HEIGHT;
+        let end = Math.min(rows.length, start + 1);
+        while (end < rows.length && rows[end].top < limit) end++;
+        const range = start + ':' + end + ':' + this.editing;
         if (!force && this.lastRange === range) return;
         this.lastRange = range;
         this.spacer.replaceChildren();
         const context = this.callbacks.context();
         const fragment = document.createDocumentFragment();
         for (let i = start; i < end; i++) {
-            const entry = this.filtered[i];
+            const item = rows[i];
+            if (item.kind === 'group') {
+                const group = el('div', 'stmn-group');
+                group.style.top = String(item.top) + 'px';
+                group.setAttribute('role', 'listitem');
+                const toggle = el('button', 'stmn-group-toggle');
+                toggle.type = 'button';
+                toggle.textContent = (item.collapsed ? '▸ ' : '▾ ') + '#' + item.start + '–#' + item.end;
+                toggle.setAttribute('aria-expanded', String(!item.collapsed));
+                toggle.setAttribute('aria-label', '#' + item.start + '부터 #' + item.end + '까지 ' + (item.collapsed ? '펼치기' : '접기'));
+                toggle.addEventListener('click', () => {
+                    if (this.groupCollapsed.has(item.start)) this.groupCollapsed.delete(item.start);
+                    else this.groupCollapsed.add(item.start);
+                    this.applyFilter({ resetScroll: false });
+                });
+                group.append(toggle, el('span', 'stmn-group-count', String(item.count) + '개'));
+                fragment.append(group);
+                continue;
+            }
+            const entry = item.entry;
             const row = el('div', 'stmn-row');
             row.dataset.index = String(entry.index);
-            row.style.top = `${i * ROW_HEIGHT}px`;
+            row.style.top = String(item.top) + 'px';
             row.setAttribute('role', 'listitem');
             if (entry.message?.is_system === true) row.classList.add('stmn-hidden-message');
             if (this.currentIndex === entry.index) row.classList.add('stmn-current');
-            const number = el('span', 'stmn-number', `#${entry.index + 1}`);
+            const number = el('span', 'stmn-number', '#' + entry.index);
             row.append(number, avatarElement(context, entry.message));
             const middle = el('div', 'stmn-row-body');
             if (this.editing === entry.index) {
@@ -355,7 +411,7 @@ export class NavigatorView {
                 input.type = 'text';
                 input.value = this.editValue;
                 input.maxLength = 300;
-                input.setAttribute('aria-label', `${entry.index + 1}번 메시지 제목 수정`);
+                input.setAttribute('aria-label', '#' + entry.index + ' 메시지 제목 수정');
                 input.addEventListener('input', () => { this.editValue = input.value; });
                 input.addEventListener('keydown', event => {
                     event.stopPropagation();
@@ -365,14 +421,20 @@ export class NavigatorView {
                 middle.append(input);
                 const help = el('span', 'stmn-edit-help', 'Enter 저장 · Esc 취소 · 빈 제목으로 저장하면 자동 복원');
                 middle.append(help);
-                queueMicrotask(() => { if (this.editing === entry.index && input.isConnected) { input.focus(); input.select(); } });
+                queueMicrotask(() => {
+                    if (this.editing === entry.index && input.isConnected) { input.focus(); input.select(); }
+                });
             } else {
                 const title = el('button', 'stmn-title', entry.title);
                 title.type = 'button';
                 title.title = entry.title;
                 title.addEventListener('click', () => this.callbacks.goToIndex(entry.index));
                 middle.append(title);
-                const detail = el('span', 'stmn-row-detail', String(entry.message?.name || (entry.message?.is_user ? 'User' : 'Character')) + (entry.custom ? ' · 사용자 지정 제목' : '') + (entry.message?.is_system ? ' · 숨김' : ''));
+                const detail = el(
+                    'span', 'stmn-row-detail',
+                    String(entry.message?.name || (entry.message?.is_user ? 'User' : 'Character')) +
+                    (entry.custom ? ' · 사용자 지정 제목' : '') + (entry.message?.is_system ? ' · 숨김' : ''),
+                );
                 middle.append(detail);
             }
             row.append(middle);
@@ -385,7 +447,7 @@ export class NavigatorView {
                 cancel.addEventListener('click', () => this.cancelEdit());
                 row.append(ok, cancel);
             } else {
-                const edit = button('edit', `#${entry.index + 1} 제목 수정`, 'pencil');
+                const edit = button('edit', '#' + entry.index + ' 제목 수정', 'pencil');
                 edit.classList.add('stmn-row-action');
                 edit.addEventListener('click', () => {
                     this.editing = entry.index;
@@ -441,9 +503,20 @@ export function installSettings(context, settings, onChange) {
     const container = el('div', 'stmn-settings');
     container.id = 'stmn-settings';
     const heading = el('details');
-    const summary = el('summary', '', 'Message Navigator & Outline (메시지 탐색)');
+    const summary = el('summary', '', '메세지 네비게이터');
     heading.append(summary);
     const inner = el('div', 'stmn-settings-inner');
+    const buttonToggleLabel = el('label', 'stmn-setting-switch');
+    buttonToggleLabel.htmlFor = 'stmn-show-navigation';
+    const buttonToggle = el('input');
+    buttonToggle.id = 'stmn-show-navigation';
+    buttonToggle.type = 'checkbox';
+    buttonToggle.setAttribute('role', 'switch');
+    buttonToggle.checked = settings.showNavigationButtons !== false;
+    buttonToggle.addEventListener('change', () => onChange('showNavigationButtons', buttonToggle.checked));
+    buttonToggleLabel.append(buttonToggle, document.createTextNode(' 메시지 이동 버튼 표시'));
+    const buttonToggleHint = el('small', 'stmn-setting-switch-hint', '끄면 메시지 개요 열기/닫기 버튼만 표시됩니다.');
+
     const modeLabel = el('label', '', '메시지 이동 범위');
     modeLabel.htmlFor = 'stmn-mode';
     const mode = el('select');
@@ -466,7 +539,7 @@ export function installSettings(context, settings, onChange) {
     }
     side.value = settings.side;
     side.addEventListener('change', () => onChange('side', side.value));
-    inner.append(modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
+    inner.append(buttonToggleLabel, buttonToggleHint, modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
     heading.append(inner);
     container.append(heading);
     host.append(container);

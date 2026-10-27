@@ -1,0 +1,22 @@
+name: Extension checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: |
+          for file in index.js model.js scroll.js ui.js position.js outline.js; do
+            node --experimental-default-type=module --check "$file"
+          done
+      - name: Run unit tests
+        run: node --experimental-default-type=module --test tests/*.test.mjs
