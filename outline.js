@@ -7,7 +7,7 @@ export const GROUP_SIZE = 10;
 export function filterOutlineEntries(entries, query = '') {
     const term = String(query ?? '').trim().toLocaleLowerCase();
     if (!term) return entries;
-    const messageId = /^#(\\d+)$/u.exec(term);
+    const messageId = /^#([0-9]+)$/u.exec(term);
     if (messageId) {
         const index = Number(messageId[1]);
         return Number.isSafeInteger(index) ? entries.filter(entry => entry.index === index) : [];
