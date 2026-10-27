@@ -1,4 +1,5 @@
 import { automaticTitle, getTitle, isCustomTitle } from './model.js';
+import { constrainNavPosition, fromRelativeNavPosition, toRelativeNavPosition } from './position.js';
 
 const BUTTONS = [
     ['first', '처음 메시지', 'chevrons-up'],
@@ -113,6 +114,7 @@ export class NavigatorView {
         this.navButtons = new Map();
         for (const [kind, label, iconName] of BUTTONS) {
             const b = button(kind, label, iconName);
+            b.title = label + ' · 드래그로 버튼 위치 이동';
             b.addEventListener('click', () => kind === 'outline' ? this.toggle() : this.callbacks.navigate(kind));
             this.navButtons.set(kind, b);
             this.nav.append(b);
@@ -155,26 +157,117 @@ export class NavigatorView {
         document.addEventListener('keydown', this.onKeydown);
         this.boundResize = () => this.position();
         window.addEventListener('resize', this.boundResize, { passive: true });
+        this.installDragging();
         this.position();
     }
 
-    position(side = 'right') {
+    navDimensions() {
+        const rect = this.nav.getBoundingClientRect();
+        const compact = window.innerWidth <= 600;
+        return { width: rect.width || (compact ? 34 : 38), height: rect.height || (compact ? 190 : 214) };
+    }
+
+    position(side = this.side || 'right') {
         this.side = side;
-        const chat = document.getElementById('chat');
-        const chatRect = chat?.getBoundingClientRect();
         const width = window.innerWidth;
-        const buttonSize = 42;
-        // Prefer just outside #chat; clamp within the viewport.
-        let left = side === 'left' ? (chatRect?.left ?? 55) - buttonSize - 10 : (chatRect?.right ?? width - 70) + 10;
+        const height = window.innerHeight;
+        const size = this.navDimensions();
+        const saved = fromRelativeNavPosition(
+            this.callbacks.getPosition?.(), width, height, size.width, size.height,
+        );
+        if (saved) {
+            this.applyPosition(saved.left, saved.centerY);
+            return;
+        }
+        const chatRect = document.getElementById('chat')?.getBoundingClientRect();
+        let left = side === 'left'
+            ? (chatRect?.left ?? 55) - size.width - 10
+            : (chatRect?.right ?? width - 70) + 10;
         if (side === 'left' && left < 6) left = (chatRect?.left ?? 6) + 8;
-        if (side === 'right' && left > width - buttonSize - 6) left = (chatRect?.right ?? width) - buttonSize - 8;
-        left = Math.max(6, Math.min(left, width - buttonSize - 6));
-        this.root.style.setProperty('--stmn-nav-left', `${Math.round(left)}px`);
+        if (side === 'right' && left > width - size.width - 6) {
+            left = (chatRect?.right ?? width) - size.width - 8;
+        }
+        this.applyPosition(left, height * (width <= 600 ? 0.52 : 0.5));
+    }
+
+    applyPosition(left, centerY) {
+        const width = window.innerWidth;
+        const size = this.navDimensions();
+        const point = constrainNavPosition(left, centerY, width, window.innerHeight, size.width, size.height);
+        this.root.style.setProperty('--stmn-nav-left', String(Math.round(point.left)) + 'px');
+        this.root.style.setProperty('--stmn-nav-top', String(Math.round(point.centerY)) + 'px');
+
         const panelWidth = Math.min(330, width - 24);
-        let panelLeft = left + buttonSize + 12;
-        if (panelLeft + panelWidth > width - 8) panelLeft = left - panelWidth - 12;
+        let panelLeft = point.left + size.width + 12;
+        if (panelLeft + panelWidth > width - 8) panelLeft = point.left - panelWidth - 12;
         if (panelLeft < 8) panelLeft = width > 650 ? width - panelWidth - 8 : 8;
-        this.root.style.setProperty('--stmn-panel-left', `${Math.max(8, Math.round(panelLeft))}px`);
+        this.root.style.setProperty('--stmn-panel-left', String(Math.max(8, Math.round(panelLeft))) + 'px');
+    }
+
+    installDragging() {
+        // Keep the original click behavior: moving fewer than 7px is a tap.
+        // Do not capture the pointer until actual dragging begins.
+        this.drag = null;
+        this.suppressDragClick = false;
+        this.onNavClickCapture = event => {
+            if (!this.suppressDragClick) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            this.suppressDragClick = false;
+        };
+        this.onNavPointerDown = event => {
+            if (event.button !== 0 || this.drag || !event.target.closest('.stmn-button')) return;
+            if (this.clickGuardTimer !== undefined) clearTimeout(this.clickGuardTimer);
+            this.suppressDragClick = false;
+            const rect = this.nav.getBoundingClientRect();
+            this.drag = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                left: rect.left,
+                centerY: rect.top + rect.height / 2,
+                active: false,
+            };
+        };
+        this.onNavPointerMove = event => {
+            const drag = this.drag;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            const dx = event.clientX - drag.startX;
+            const dy = event.clientY - drag.startY;
+            if (!drag.active && Math.hypot(dx, dy) < 7) return;
+            if (!drag.active) {
+                drag.active = true;
+                this.nav.classList.add('stmn-dragging');
+                this.nav.setPointerCapture?.(event.pointerId);
+            }
+            this.applyPosition(drag.left + dx, drag.centerY + dy);
+            if (event.cancelable) event.preventDefault();
+        };
+        this.onNavPointerEnd = event => {
+            const drag = this.drag;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            this.drag = null;
+            this.nav.classList.remove('stmn-dragging');
+            if (event.type === 'pointercancel') {
+                if (drag.active) this.applyPosition(drag.left, drag.centerY);
+                return;
+            }
+            if (!drag.active) return;
+            this.suppressDragClick = true;
+            this.clickGuardTimer = setTimeout(() => { this.suppressDragClick = false; }, 600);
+            const rect = this.nav.getBoundingClientRect();
+            const size = this.navDimensions();
+            const saved = toRelativeNavPosition(
+                rect.left, rect.top + rect.height / 2,
+                window.innerWidth, window.innerHeight, size.width, size.height,
+            );
+            this.callbacks.savePosition?.(saved);
+        };
+        this.nav.addEventListener('click', this.onNavClickCapture, true);
+        this.nav.addEventListener('pointerdown', this.onNavPointerDown);
+        window.addEventListener('pointermove', this.onNavPointerMove);
+        window.addEventListener('pointerup', this.onNavPointerEnd);
+        window.addEventListener('pointercancel', this.onNavPointerEnd);
     }
 
     setActive(index, busy = false) {
@@ -330,8 +423,14 @@ export class NavigatorView {
 
     destroy() {
         if (this.raf !== null) cancelAnimationFrame(this.raf);
+        if (this.clickGuardTimer !== undefined) clearTimeout(this.clickGuardTimer);
         document.removeEventListener('keydown', this.onKeydown);
         window.removeEventListener('resize', this.boundResize);
+        this.nav.removeEventListener('click', this.onNavClickCapture, true);
+        this.nav.removeEventListener('pointerdown', this.onNavPointerDown);
+        window.removeEventListener('pointermove', this.onNavPointerMove);
+        window.removeEventListener('pointerup', this.onNavPointerEnd);
+        window.removeEventListener('pointercancel', this.onNavPointerEnd);
         this.root.remove();
     }
 }
@@ -367,7 +466,7 @@ export function installSettings(context, settings, onChange) {
     }
     side.value = settings.side;
     side.addEventListener('change', () => onChange('side', side.value));
-    inner.append(modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '중앙 목록 버튼으로 목차를 열고, 연필 아이콘으로 제목을 수정합니다. 제목은 해당 채팅에 저장되어 브랜치 생성 시 복제됩니다.'));
+    inner.append(modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
     heading.append(inner);
     container.append(heading);
     host.append(container);
