@@ -4,7 +4,7 @@ import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
 
 const PREFIX = '[ST Message Navigator]';
-const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null });
+const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null, showNavigationButtons: true });
 let app;
 
 function context() { return SillyTavern.getContext(); }
@@ -21,6 +21,7 @@ function getSettings() {
     if (!['visible', 'all'].includes(settings.mode)) settings.mode = 'visible';
     if (!['left', 'right'].includes(settings.side)) settings.side = 'right';
     if (!validNavPosition(settings.position)) settings.position = null;
+    if (typeof settings.showNavigationButtons !== 'boolean') settings.showNavigationButtons = true;
     return settings;
 }
 
@@ -51,6 +52,7 @@ class NavigatorApp {
             getPosition: () => this.settings.position,
             savePosition: position => this.changeSetting('position', position),
         });
+        this.view.setNavigationButtonsVisible(this.settings.showNavigationButtons);
         this.view.position(this.settings.side);
         installSettings(context(), this.settings, (key, value) => this.changeSetting(key, value));
         this.bindChatScroll();
@@ -98,7 +100,9 @@ class NavigatorApp {
         if (key === 'mode' && !['visible', 'all'].includes(value)) return;
         if (key === 'side' && !['left', 'right'].includes(value)) return;
         if (key === 'position' && !validNavPosition(value)) return;
+        if (key === 'showNavigationButtons' && typeof value !== 'boolean') return;
         this.settings[key] = value;
+        if (key === 'showNavigationButtons') this.view.setNavigationButtonsVisible(value);
         if (key === 'side') {
             // Choosing left/right restores the default placement.
             this.settings.position = null;
@@ -124,6 +128,7 @@ class NavigatorApp {
             this.view.editing = -1;
             this.view.query = '';
             this.view.search.value = '';
+            this.view.groupCollapsed.clear();
             this.view.setStatus('');
             this.scheduleRefresh(true);
         });
@@ -190,7 +195,7 @@ class NavigatorApp {
             this.lastNavigated = index;
             this.highlightTarget(node);
             this.view.setActive(index, true);
-            this.view.setStatus(`메시지 #${index + 1}로 이동했습니다.`);
+            this.view.setStatus(`메시지 #${index}로 이동했습니다.`);
         } catch (error) {
             if (!cancelled()) {
                 console.warn(PREFIX, error);
@@ -259,7 +264,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.1.0)');
+        console.info(PREFIX, 'loaded (v1.2.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
