@@ -110,3 +110,9 @@
 @media (prefers-reduced-motion: reduce) {
     #stmn-root .stmn-button { transition: none; }
 }
+
+/* Transient, extension-owned target marker. No message contents are altered. */
+#chat > .mes.stmn-jump-target {
+    outline: 2px solid var(--SmartThemeQuoteColor, #99b9ef);
+    outline-offset: -2px;
+}
