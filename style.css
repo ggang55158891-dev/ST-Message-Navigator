@@ -229,7 +229,7 @@
     flex: 1; min-width: 0; margin: 0; padding: 10px 8px;
     background: color-mix(in srgb, var(--stmn-bg), transparent 35%);
     border: 1px solid var(--stmn-border); border-radius: 10px;
-    color: var(--stmn-fg); font: 600 12px inherit; cursor: pointer;
+    color: var(--stmn-fg); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 #stmn-root .stmn-elevator-tab.stmn-elevator-active-tab {
     background: color-mix(in srgb, var(--stmn-accent), transparent 78%);
