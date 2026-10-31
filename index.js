@@ -1,244 +1,298 @@
-/* Toast History Wand Panel: independent implementation inspired by LenAnderson/SillyTavern-ToastHistory. */
-(() => {
-'use strict';
-if (window.__toastHistoryWandPanel) return;
-window.__toastHistoryWandPanel = true;
-const KEY = 'st-toast-history-wand-panel-v1';
-const LIMIT = 400;
-const TYPES = ['info','success','warning','error'];
-const NAMES = {info:'정보',success:'성공',warning:'경고',error:'오류'};
-const callbacks = new Map();
-let entries = [], blocked = [], nextId = Date.now();
-let panel, listing, counter, filter, query, status, topButton, wandButton;
+import { SETTINGS_KEY, assignCustomTitle, findTarget } from './model.js';
+import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage } from './scroll.js';
+import { installSettings, NavigatorView } from './ui.js';
+import { validNavPosition } from './position.js';
+import { listAvailableBuildings, enterBuilding } from './buildings.js';
 
-function textOf(input) {
-    if (input == null) return '';
-    if (typeof input === 'string' || typeof input === 'number') return String(input);
-    if (input instanceof Node) return input.textContent || '';
-    if (input.jquery) return input.text() || '';
-    return String(input);
-}
-function read() {
-    try {
-        const data = JSON.parse(localStorage.getItem(KEY) || '{}');
-        if (Array.isArray(data.entries)) entries = data.entries.filter(x =>
-            x && TYPES.includes(x.level) && typeof x.message === 'string' && Number.isFinite(x.time)
-        ).slice(-LIMIT).map(x => ({
-            id:String(x.id || ++nextId), level:x.level, title:String(x.title || '').slice(0,200),
-            message:x.message.slice(0,6000), time:x.time
-        }));
-        if (Array.isArray(data.blocked)) blocked = data.blocked.filter(x =>
-            x && TYPES.includes(x.level) && typeof x.message === 'string'
-        ).slice(0,500);
-    } catch (e) { console.warn('[Toast History Panel] Cannot read saved history', e); }
-}
-function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({entries,blocked})); }
-    catch (e) { console.warn('[Toast History Panel] Cannot save local history', e); }
-}
-function node(tag, cls, text) {
-    const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text !== undefined) n.textContent = text;
-    return n;
-}
-function action(label, title, cb) {
-    const n = node('button','stthp-action',label);
-    n.type = 'button'; n.title = title;
-    n.addEventListener('click', cb);
-    return n;
-}
-function isBlocked(x) { return blocked.some(b => b.level === x.level && b.message === x.message); }
-function visibleEntries() {
-    const q = query.value.trim().toLocaleLowerCase();
-    return entries.slice().reverse().filter(x =>
-        (filter.value === 'all' || x.level === filter.value) &&
-        (!q || (x.title + '\n' + x.message).toLocaleLowerCase().includes(q))
-    );
-}
-function refreshTop() {
-    if (!topButton) return;
-    topButton.hidden = entries.length === 0;
-    topButton.title = '저장된 알림 ' + entries.length + '개';
-    topButton.querySelector('.stthp-top-number').textContent = String(entries.length);
-}
-function render() {
-    if (!panel) return;
-    const scroll = listing.scrollTop;
-    const found = visibleEntries();
-    counter.textContent = String(entries.length);
-    listing.replaceChildren();
-    if (found.length === 0) listing.append(node('p','stthp-empty',
-        entries.length ? '조건에 맞는 알림이 없어요.' : '아직 저장된 알림이 없어요.'));
-    for (const item of found) {
-        const muted = isBlocked(item);
-        const card = node('article','stthp-card stthp-' + item.level + (muted ? ' stthp-muted' : ''));
-        const head = node('div','stthp-meta');
-        head.append(node('b','',NAMES[item.level]));
-        const ts = node('time','',new Date(item.time).toLocaleString());
-        ts.dateTime = new Date(item.time).toISOString();
-        head.append(ts); card.append(head);
-        if (item.title) card.append(node('strong','stthp-title',item.title));
-        card.append(node('div','stthp-message',item.message));
-        const actions = node('div','stthp-card-actions');
-        actions.append(action('복사','이 알림을 복사',() => void copyText(
-            [item.title,item.message].filter(Boolean).join('\n'))));
-        actions.append(action(muted ? '차단 해제' : '기록 차단',
-            '같은 종류/내용의 새 알림을 기록에서만 제외하거나 다시 기록합니다.',
-            () => {
-                if (muted) blocked = blocked.filter(b => !(b.level === item.level && b.message === item.message));
-                else blocked.push({level:item.level,message:item.message});
-                save(); render();
-            }));
-        const callback = callbacks.get(item.id);
-        if (callback) actions.append(action('원래 동작','이 세션에서 원래 알림의 클릭 동작 실행',
-            () => { try { callback(); } catch (e) { console.error('[Toast History Panel] Callback failed',e); } }));
-        card.append(actions); listing.append(card);
+const PREFIX = '[ST Message Navigator]';
+const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null, showNavigationButtons: true, elevatorTheme: 'classic', elevatorSky: 'auto' });
+let app;
+
+function context() { return SillyTavern.getContext(); }
+function getSettings() {
+    const ctx = context();
+    if (!ctx.extensionSettings || typeof ctx.extensionSettings !== 'object') {
+        throw new Error('실리태번 확장 설정을 사용할 수 없습니다.');
     }
-    listing.scrollTop = scroll;
-    refreshTop();
-}
-async function copyText(value) {
-    try {
-        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
-        else {
-            const tmp = node('textarea');
-            tmp.value = value; tmp.style.position = 'fixed'; tmp.style.opacity = '0';
-            document.body.append(tmp); tmp.select();
-            const copied = document.execCommand('copy'); tmp.remove();
-            if (!copied) throw new Error('Copy not supported');
-        }
-        status.textContent = '복사했어요.';
-    } catch (e) {
-        console.error('[Toast History Panel] Copy failed',e);
-        status.textContent = '복사 실패: 브라우저 권한을 확인해 주세요.';
+    const root = ctx.extensionSettings;
+    if (!root[SETTINGS_KEY] || typeof root[SETTINGS_KEY] !== 'object') {
+        root[SETTINGS_KEY] = { ...DEFAULT_SETTINGS };
     }
+    const settings = root[SETTINGS_KEY];
+    if (!['visible', 'all'].includes(settings.mode)) settings.mode = 'visible';
+    if (!['left', 'right'].includes(settings.side)) settings.side = 'right';
+    if (!validNavPosition(settings.position)) settings.position = null;
+    if (typeof settings.showNavigationButtons !== 'boolean') settings.showNavigationButtons = true;
+    if (!['classic', 'restricted', 'sky'].includes(settings.elevatorTheme)) settings.elevatorTheme = 'classic';
+    if (!['auto', 'day', 'night'].includes(settings.elevatorSky)) settings.elevatorSky = 'auto';
+    return settings;
 }
-function openPanel() {
-    panel.hidden = false;
-    wandButton?.setAttribute('aria-expanded','true');
-    render(); query.focus();
-}
-function closePanel() {
-    panel.hidden = true;
-    wandButton?.setAttribute('aria-expanded','false');
-}
-function togglePanel() { panel.hidden ? openPanel() : closePanel(); }
-function makePanel() {
-    panel = node('aside','stthp-panel');
-    panel.id = 'stthp-panel'; panel.hidden = true;
-    panel.setAttribute('role','dialog');
-    panel.setAttribute('aria-label','알림 기록 패널');
-    panel.setAttribute('aria-modal','false');
-    const heading = node('header','stthp-heading');
-    const title = node('div','stthp-heading-title');
-    counter = node('span','stthp-counter','0');
-    title.append(node('b','','알림 기록'),counter);
-    heading.append(title,action('×','닫기',closePanel));
-    panel.append(heading);
-    const controls = node('div','stthp-filters');
-    query = node('input','stthp-query');
-    query.type = 'search'; query.placeholder = '알림 내용 검색';
-    query.setAttribute('aria-label','알림 내용 검색');
-    query.addEventListener('input',render);
-    filter = node('select','stthp-filter');
-    filter.setAttribute('aria-label','알림 종류 필터');
-    for (const pair of [['all','전체'],...TYPES.map(t=>[t,NAMES[t]])]) {
-        const o = node('option','',pair[1]); o.value = pair[0]; filter.append(o);
-    }
-    filter.addEventListener('change',render);
-    controls.append(query,filter); panel.append(controls);
-    const bar = node('div','stthp-toolbar');
-    bar.append(
-        action('보이는 기록 복사','현재 필터에 맞는 기록 전체 복사',() => {
-            const s = visibleEntries().map(x =>
-                '[' + new Date(x.time).toLocaleString() + '] ' + NAMES[x.level] +
-                (x.title ? ' / ' + x.title : '') + '\n' + x.message).join('\n\n');
-            if (s) void copyText(s);
-            else status.textContent = '복사할 기록이 없어요.';
-        }),
-        action('기록 비우기','모든 기록 삭제 (차단 목록은 유지)',() => {
-            if (!entries.length || !confirm('저장된 알림 기록을 모두 지울까요?')) return;
-            entries = []; callbacks.clear(); save(); render();
-            status.textContent = '기록을 삭제했어요.';
-        })
-    );
-    panel.append(bar);
-    listing = node('div','stthp-list');
-    panel.append(listing);
-    status = node('div','stthp-status','브라우저에만 저장됩니다. 최근 최대 400개.');
-    status.setAttribute('role','status'); panel.append(status);
-    document.body.append(panel);
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && !panel.hidden) closePanel();
-    });
-}
-function makeTriggers() {
-    const menu = document.getElementById('extensionsMenu');
-    if (menu) {
-        const wrap = node('div','extension_container');
-        wrap.id = 'stthp-wand-container';
-        wandButton = node('div','list-group-item flex-container flexGap5 stthp-wand');
-        wandButton.id = 'stthp-wand-button';
-        wandButton.role = 'button'; wandButton.tabIndex = 0;
-        wandButton.setAttribute('aria-controls','stthp-panel');
-        wandButton.setAttribute('aria-expanded','false');
-        wandButton.append(node('div','fa-solid fa-clock-rotate-left extensionsMenuExtensionButton'),
-            node('span','','알림 기록 패널'));
-        wandButton.addEventListener('click',togglePanel);
-        wandButton.addEventListener('keydown',e => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePanel(); }
-        });
-        wrap.append(wandButton); menu.append(wrap);
-        document.getElementById('extensionsMenuButton')?.style.removeProperty('display');
-    } else console.warn('[Toast History Panel] Wand menu not found');
-    const top = document.getElementById('top-settings-holder');
-    if (top) {
-        topButton = node('button','stthp-top');
-        topButton.type = 'button'; topButton.title = '알림 기록 열기';
-        topButton.append(node('span','fa-solid fa-bell'),
-            node('span','stthp-top-number','0'));
-        topButton.addEventListener('click',togglePanel);
-        top.prepend(topButton);
-    }
-    refreshTop();
-}
-function capture(level,message,title,result,options) {
-    const toast = result?.[0];
-    const entry = {
-        id:String(++nextId), level, time:Date.now(),
-        title:(toast?.querySelector?.('.toast-title')?.textContent || textOf(title)).slice(0,200),
-        message:(toast?.querySelector?.('.toast-message')?.textContent || textOf(message)).slice(0,6000)
-    };
-    if ((!entry.title && !entry.message) || isBlocked(entry)) return;
-    entries.push(entry);
-    if (typeof options?.onclick === 'function') callbacks.set(entry.id,options.onclick);
-    while (entries.length > LIMIT) {
-        const old = entries.shift(); callbacks.delete(old.id);
-    }
-    save();
-    if (!panel.hidden) render();
-    else refreshTop();
-}
-function hookToastr() {
-    if (!window.toastr) {
-        console.warn('[Toast History Panel] toastr missing; capture unavailable.');
-        return;
-    }
-    for (const level of TYPES) {
-        if (typeof toastr[level] !== 'function') continue;
-        const original = toastr[level];
-        toastr[level] = function(message,title,options) {
-            const result = original.apply(this,arguments);
-            try { capture(level,message,title,result,options); }
-            catch (e) { console.error('[Toast History Panel] Capture failed',e); }
-            return result;
+
+class NavigatorApp {
+    constructor() {
+        this.settings = getSettings();
+        this.navSerial = 0;
+        this.busy = false;
+        this.lastNavigated = -1;
+        this.cursor = new NavigationCursor();
+        this.refreshTimer = null;
+        this.listeners = [];
+        this.chatElement = null;
+        this.chatScrollHandler = () => {
+            if (this.busy || this.scrollRaf !== null) return;
+            this.scrollRaf = requestAnimationFrame(() => {
+                this.scrollRaf = null;
+                this.updateCurrent();
+            });
         };
+        this.scrollRaf = null;
+        this.view = new NavigatorView({
+            context, hasChat: () => this.hasChat(),
+            navigate: action => { void this.navigate(action); },
+            goToIndex: index => { void this.goToIndex(index); },
+            canNavigate: (kind, index) => this.canNavigate(kind, index),
+            saveTitle: (index, title) => this.saveTitle(index, title),
+            getPosition: () => this.settings.position,
+            savePosition: position => this.changeSetting('position', position),
+            listBuildings: listAvailableBuildings,
+            enterBuilding,
+            getTheme: () => this.settings.elevatorTheme,
+            getSkyMode: () => this.settings.elevatorSky,
+        });
+        this.view.setNavigationButtonsVisible(this.settings.showNavigationButtons);
+        this.view.position(this.settings.side);
+        installSettings(context(), this.settings, (key, value) => this.changeSetting(key, value));
+        this.bindChatScroll();
+        this.bindEvents();
+        this.updateCurrent();
+        this.view.rebuild();
+    }
+
+    hasChat() {
+        const ctx = context();
+        return Array.isArray(ctx.chat) && ctx.chat.length > 0;
+    }
+
+    canNavigate(action, index) {
+        const ctx = context();
+        return findTarget(ctx.chat || [], index, action, this.settings.mode) >= 0;
+    }
+
+    updateCurrent() {
+        if (this.busy) return;
+        this.bindChatScroll();
+        const chat = context().chat || [];
+        const id = this.cursor.resolve(this.chatElement, chat.length);
+        this.lastNavigated = id;
+        this.view.setActive(id);
+    }
+
+    bindChatScroll() {
+        const current = getChatElement();
+        if (current === this.chatElement) return;
+        this.chatElement?.removeEventListener('scroll', this.chatScrollHandler);
+        this.cursor.clear();
+        this.chatElement = current;
+        this.chatElement?.addEventListener('scroll', this.chatScrollHandler, { passive: true });
+        this.resizeObserver?.disconnect();
+        this.resizeObserver = null;
+        if (this.chatElement && typeof ResizeObserver !== 'undefined') {
+            this.resizeObserver = new ResizeObserver(() => this.view.position(this.settings.side));
+            this.resizeObserver.observe(this.chatElement);
+        }
+        this.view.position(this.settings.side);
+    }
+
+    changeSetting(key, value) {
+        if (key === 'mode' && !['visible', 'all'].includes(value)) return;
+        if (key === 'side' && !['left', 'right'].includes(value)) return;
+        if (key === 'position' && !validNavPosition(value)) return;
+        if (key === 'showNavigationButtons' && typeof value !== 'boolean') return;
+        if (key === 'elevatorTheme' && !['classic', 'restricted', 'sky'].includes(value)) return;
+        if (key === 'elevatorSky' && !['auto', 'day', 'night'].includes(value)) return;
+        this.settings[key] = value;
+        if (key === 'elevatorTheme' || key === 'elevatorSky') {
+            this.view.elevator?.applyTheme(this.settings.elevatorTheme, this.settings.elevatorSky);
+        }
+        if (key === 'showNavigationButtons') this.view.setNavigationButtonsVisible(value);
+        if (key === 'side') {
+            // Choosing left/right restores the default placement.
+            this.settings.position = null;
+            this.view.position(value);
+        }
+        context().saveSettingsDebounced?.();
+        if (key !== 'position') this.updateCurrent();
+    }
+
+    bindEvents() {
+        const ctx = context();
+        const events = ctx.eventTypes || ctx.event_types || {};
+        const register = (key, cb) => {
+            if (!events[key] || !ctx.eventSource?.on) return;
+            ctx.eventSource.on(events[key], cb);
+            this.listeners.push([events[key], cb]);
+        };
+        register('CHAT_CHANGED', () => {
+            this.navSerial++;
+            this.busy = false;
+            this.cursor.clear();
+            this.clearTargetHighlight();
+            this.view.editing = -1;
+            this.view.query = '';
+            this.view.search.value = '';
+            this.view.groupCollapsed.clear();
+            this.view.elevator?.onChatChanged();
+            this.view.setStatus('');
+            this.scheduleRefresh(true);
+        });
+        for (const key of [
+            'CHAT_CREATED', 'MESSAGE_SENT', 'MESSAGE_RECEIVED',
+            'USER_MESSAGE_RENDERED', 'CHARACTER_MESSAGE_RENDERED',
+            'MESSAGE_EDITED', 'MESSAGE_UPDATED', 'MESSAGE_DELETED',
+            'MESSAGE_SWIPED', 'MORE_MESSAGES_LOADED',
+        ]) register(key, () => this.scheduleRefresh(false));
+        // Scope this observer to the chat only. It never changes ST's nodes.
+        if (this.chatElement && typeof MutationObserver !== 'undefined') {
+            this.observer = new MutationObserver(records => {
+                if (records.some(r => (r.type === 'childList' && r.target === this.chatElement) || r.attributeName === 'is_system')) {
+                    this.scheduleRefresh(false);
+                }
+            });
+            this.observer.observe(this.chatElement, {
+                childList: true, subtree: true, attributes: true,
+                attributeFilter: ['is_system'],
+            });
+        }
+    }
+
+    scheduleRefresh(reset) {
+        if (reset) this.pendingReset = true;
+        if (this.refreshTimer !== null) return;
+        this.refreshTimer = setTimeout(() => {
+            this.refreshTimer = null;
+            this.bindChatScroll();
+            if (this.pendingReset) {
+                this.pendingReset = false;
+                this.lastNavigated = -1;
+                this.view.rebuild();
+            } else this.view.rebuild({ keepScroll: true });
+            this.updateCurrent();
+        }, 90);
+    }
+
+    async navigate(action) {
+        const ctx = context();
+        this.bindChatScroll();
+        const base = this.cursor.resolve(this.chatElement, ctx.chat?.length || 0);
+        const target = findTarget(ctx.chat || [], base, action, this.settings.mode);
+        if (target >= 0) await this.goToIndex(target);
+    }
+
+    async goToIndex(index) {
+        if (this.busy) return;
+        const initial = context();
+        const chatRef = initial.chat;
+        const chatId = initial.chatId;
+        if (!Array.isArray(chatRef) || !chatRef[index] || !Number.isInteger(index)) return;
+        const token = ++this.navSerial;
+        this.busy = true;
+        this.view.setActive(this.lastNavigated, true);
+        this.view.setStatus('메시지 위치를 찾는 중…');
+        const cancelled = () => token !== this.navSerial || context().chat !== chatRef || context().chatId !== chatId;
+        try {
+            const chatElement = await ensureMessageRendered(initial, index, cancelled, text => this.view.setStatus(text));
+            if (cancelled() || !chatElement) return;
+            const node = getRenderedMessage(chatElement, index);
+            if (!scrollToMessage(chatElement, node)) throw new Error('대상 메시지가 화면에서 숨겨져 있어 스크롤할 수 없습니다.');
+            this.cursor.set(chatElement, index);
+            this.lastNavigated = index;
+            this.highlightTarget(node);
+            this.view.setActive(index, true);
+            this.view.setStatus(`메시지 #${index}로 이동했습니다.`);
+        } catch (error) {
+            if (!cancelled()) {
+                console.warn(PREFIX, error);
+                this.view.setStatus(error.message || '이동에 실패했습니다.', true);
+            }
+        } finally {
+            if (token === this.navSerial) {
+                this.busy = false;
+                // UI scroll events can run after programmatic scrolling.
+                this.view.setActive(this.lastNavigated);
+            }
+        }
+    }
+
+    // A short highlight removes ambiguity near the end of a chat where the
+    // selected message cannot be scrolled all the way to the top.
+    highlightTarget(node) {
+        this.clearTargetHighlight();
+        this.highlightedNode = node;
+        node.classList.add('stmn-jump-target');
+        this.highlightTimer = setTimeout(() => this.clearTargetHighlight(), 1800);
+    }
+
+    clearTargetHighlight() {
+        if (this.highlightTimer !== undefined) clearTimeout(this.highlightTimer);
+        this.highlightTimer = undefined;
+        this.highlightedNode?.classList.remove('stmn-jump-target');
+        this.highlightedNode = null;
+    }
+
+    async saveTitle(index, title) {
+        const ctx = context();
+        if (!ctx.chatId || !ctx.chatMetadata || !Array.isArray(ctx.chat) || !ctx.chat[index]) {
+            throw new Error('먼저 저장된 채팅을 선택해 주세요.');
+        }
+        const chatRef = ctx.chat;
+        const chatId = ctx.chatId;
+        // Don't edit text, swipes, prompt order, or another extension's keys.
+        assignCustomTitle(chatRef, ctx.chatMetadata, index, title);
+        // saveMetadata() ultimately saves the whole chat (message ID + metadata).
+        // Start the save immediately to minimize switch-chat races.
+        if (typeof ctx.saveMetadata !== 'function') throw new Error('이 버전에서는 메타데이터 저장을 사용할 수 없습니다.');
+        await ctx.saveMetadata();
+        if (context().chat !== chatRef || context().chatId !== chatId) {
+            throw new Error('저장 도중 채팅이 바뀌었습니다. 저장 결과를 확인해 주세요.');
+        }
+    }
+
+    destroy() {
+        this.navSerial++;
+        this.cursor.clear();
+        this.clearTargetHighlight();
+        if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
+        if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
+        this.resizeObserver?.disconnect();
+        this.observer?.disconnect();
+        this.chatElement?.removeEventListener('scroll', this.chatScrollHandler);
+        const ctx = context();
+        for (const [name, cb] of this.listeners) ctx.eventSource?.removeListener?.(name, cb);
+        document.getElementById('stmn-settings')?.remove();
+        this.view.destroy();
     }
 }
-function init() {
-    read(); makePanel(); makeTriggers(); hookToastr(); render();
+
+function initialize() {
+    if (app || document.getElementById('stmn-root')) return;
+    try {
+        app = new NavigatorApp();
+        console.info(PREFIX, 'loaded (v1.3.0)');
+    } catch (error) {
+        console.error(PREFIX, 'initialization error:', error);
+    }
 }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',init,{once:true});
-else init();
-})();
+
+// APP_READY self-fires for late extensions on recent SillyTavern versions.
+// A DOM-ready fallback supports older releases without double initialization.
+if (globalThis.SillyTavern?.getContext) {
+    try {
+        const ctx = context();
+        const readyEvent = (ctx.eventTypes || ctx.event_types || {}).APP_READY;
+        if (readyEvent) ctx.eventSource.on(readyEvent, initialize);
+        if (document.readyState === 'complete') setTimeout(initialize, 0);
+        else window.addEventListener('load', initialize, { once: true });
+    } catch (error) {
+        console.error(PREFIX, 'startup error:', error);
+    }
+}
