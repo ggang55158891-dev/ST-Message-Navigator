@@ -2,9 +2,10 @@ import { SETTINGS_KEY, assignCustomTitle, findTarget } from './model.js';
 import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage } from './scroll.js';
 import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
+import { listAvailableBuildings, enterBuilding } from './buildings.js';
 
 const PREFIX = '[ST Message Navigator]';
-const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null, showNavigationButtons: true });
+const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null, showNavigationButtons: true, elevatorTheme: 'classic', elevatorSky: 'auto' });
 let app;
 
 function context() { return SillyTavern.getContext(); }
@@ -22,6 +23,8 @@ function getSettings() {
     if (!['left', 'right'].includes(settings.side)) settings.side = 'right';
     if (!validNavPosition(settings.position)) settings.position = null;
     if (typeof settings.showNavigationButtons !== 'boolean') settings.showNavigationButtons = true;
+    if (!['classic', 'restricted', 'sky'].includes(settings.elevatorTheme)) settings.elevatorTheme = 'classic';
+    if (!['auto', 'day', 'night'].includes(settings.elevatorSky)) settings.elevatorSky = 'auto';
     return settings;
 }
 
@@ -51,6 +54,10 @@ class NavigatorApp {
             saveTitle: (index, title) => this.saveTitle(index, title),
             getPosition: () => this.settings.position,
             savePosition: position => this.changeSetting('position', position),
+            listBuildings: listAvailableBuildings,
+            enterBuilding,
+            getTheme: () => this.settings.elevatorTheme,
+            getSkyMode: () => this.settings.elevatorSky,
         });
         this.view.setNavigationButtonsVisible(this.settings.showNavigationButtons);
         this.view.position(this.settings.side);
@@ -101,7 +108,12 @@ class NavigatorApp {
         if (key === 'side' && !['left', 'right'].includes(value)) return;
         if (key === 'position' && !validNavPosition(value)) return;
         if (key === 'showNavigationButtons' && typeof value !== 'boolean') return;
+        if (key === 'elevatorTheme' && !['classic', 'restricted', 'sky'].includes(value)) return;
+        if (key === 'elevatorSky' && !['auto', 'day', 'night'].includes(value)) return;
         this.settings[key] = value;
+        if (key === 'elevatorTheme' || key === 'elevatorSky') {
+            this.view.elevator?.applyTheme(this.settings.elevatorTheme, this.settings.elevatorSky);
+        }
         if (key === 'showNavigationButtons') this.view.setNavigationButtonsVisible(value);
         if (key === 'side') {
             // Choosing left/right restores the default placement.
@@ -129,6 +141,7 @@ class NavigatorApp {
             this.view.query = '';
             this.view.search.value = '';
             this.view.groupCollapsed.clear();
+            this.view.elevator?.onChatChanged();
             this.view.setStatus('');
             this.scheduleRefresh(true);
         });
@@ -264,7 +277,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.2.0)');
+        console.info(PREFIX, 'loaded (v1.3.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }

@@ -1,4 +1,5 @@
 import { automaticTitle, getTitle, isCustomTitle } from './model.js';
+import { ElevatorPanel } from './elevator-ui.js';
 import { constrainNavPosition, fromRelativeNavPosition, toRelativeNavPosition } from './position.js';
 import { GROUP_SIZE, MESSAGE_ROW_HEIGHT, buildOutlineRows, filterOutlineEntries, findOutlineRow } from './outline.js';
 
@@ -166,7 +167,9 @@ export class NavigatorView {
         this.list.addEventListener('scroll', () => this.scheduleRows(), { passive: true });
         this.footer = el('div', 'stmn-footer', '');
         this.footer.setAttribute('role', 'status');
+        this.searchbox = searchbox;
         this.panel.append(header, this.caption, searchbox, this.groupTools, this.list, this.footer);
+        this.elevator = new ElevatorPanel(this, callbacks);
         this.root.append(this.nav, this.panel);
         document.body.append(this.root);
         this.onKeydown = event => {
@@ -221,7 +224,7 @@ export class NavigatorView {
         this.root.style.setProperty('--stmn-nav-left', String(Math.round(point.left)) + 'px');
         this.root.style.setProperty('--stmn-nav-top', String(Math.round(point.centerY)) + 'px');
 
-        const panelWidth = Math.min(330, width - 24);
+        const panelWidth = Math.min(400, width - 24);
         let panelLeft = point.left + size.width + 12;
         if (panelLeft + panelWidth > width - 8) panelLeft = point.left - panelWidth - 12;
         if (panelLeft < 8) panelLeft = width > 650 ? width - panelWidth - 8 : 8;
@@ -297,6 +300,7 @@ export class NavigatorView {
     setActive(index, busy = false) {
         this.currentIndex = index;
         this.navButtons.get('outline')?.setAttribute('aria-expanded', String(this.panelOpen));
+        this.elevator?.updateFloor(index);
         const hasChat = this.callbacks.hasChat();
         for (const [kind, b] of this.navButtons.entries()) {
             if (kind !== 'outline') b.disabled = !hasChat || busy || !this.callbacks.canNavigate(kind, index);
@@ -314,6 +318,7 @@ export class NavigatorView {
         this.navButtons.get('outline')?.setAttribute('aria-expanded', String(this.panelOpen));
         if (this.panelOpen) {
             this.rebuild();
+            this.elevator?.onShow();
             this.panel.focus({ preventScroll: true });
             this.position(this.side);
         }
@@ -350,7 +355,7 @@ export class NavigatorView {
         this.caption.textContent = '총 ' + this.entries.length.toLocaleString() + '개 메시지' +
             (this.query ? ' · 검색 결과 ' + this.filtered.length.toLocaleString() + '개' : '');
         this.spacer.style.height = String(layout.totalHeight) + 'px';
-        this.groupTools.hidden = Boolean(this.query) || this.entries.length === 0;
+        this.groupTools.hidden = this.elevator?.tab === 'buildings' || Boolean(this.query) || this.entries.length === 0;
         this.expandAllButton.disabled = this.groupCollapsed.size === 0;
         this.collapseAllButton.disabled = this.groupCollapsed.size >= Math.ceil(this.entries.length / GROUP_SIZE);
         if (resetScroll) this.list.scrollTop = 0;
@@ -493,6 +498,7 @@ export class NavigatorView {
         window.removeEventListener('pointermove', this.onNavPointerMove);
         window.removeEventListener('pointerup', this.onNavPointerEnd);
         window.removeEventListener('pointercancel', this.onNavPointerEnd);
+        this.elevator?.destroy();
         this.root.remove();
     }
 }
@@ -503,9 +509,34 @@ export function installSettings(context, settings, onChange) {
     const container = el('div', 'stmn-settings');
     container.id = 'stmn-settings';
     const heading = el('details');
-    const summary = el('summary', '', '메세지 네비게이터');
+    const summary = el('summary', '', '엘리베이터 · 채팅과 메시지 탐색');
     heading.append(summary);
     const inner = el('div', 'stmn-settings-inner');
+    const themeLabel = el('label', '', '엘리베이터 외형');
+    themeLabel.htmlFor = 'stmn-elevator-theme';
+    const themeSelect = el('select');
+    themeSelect.id = 'stmn-elevator-theme';
+    for (const [value, label] of [['classic', '클래식 · 금속 엘리베이터'],
+        ['restricted', '금지된 층 · 낡은 엘리베이터'], ['sky', '스카이 리프트 · 투명 엘리베이터']]) {
+        const option = el('option', '', label);
+        option.value = value;
+        themeSelect.append(option);
+    }
+    themeSelect.value = settings.elevatorTheme || 'classic';
+    themeSelect.addEventListener('change', () => onChange('elevatorTheme', themeSelect.value));
+
+    const skyLabel = el('label', '', '스카이 리프트 배경');
+    skyLabel.htmlFor = 'stmn-elevator-sky';
+    const skySelect = el('select');
+    skySelect.id = 'stmn-elevator-sky';
+    for (const [value, label] of [['auto', '자동 · 시스템 밝기'], ['day', '낮 · 구름'],
+        ['night', '밤 · 별빛']]) {
+        const option = el('option', '', label);
+        option.value = value;
+        skySelect.append(option);
+    }
+    skySelect.value = settings.elevatorSky || 'auto';
+    skySelect.addEventListener('change', () => onChange('elevatorSky', skySelect.value));
     const buttonToggleLabel = el('label', 'stmn-setting-switch');
     buttonToggleLabel.htmlFor = 'stmn-show-navigation';
     const buttonToggle = el('input');
@@ -539,7 +570,7 @@ export function installSettings(context, settings, onChange) {
     }
     side.value = settings.side;
     side.addEventListener('change', () => onChange('side', side.value));
-    inner.append(buttonToggleLabel, buttonToggleHint, modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
+    inner.append(themeLabel, themeSelect, skyLabel, skySelect, buttonToggleLabel, buttonToggleHint, modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
     heading.append(inner);
     container.append(heading);
     host.append(container);
