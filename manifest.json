@@ -1,10 +1,11 @@
 {
-  "display_name": "메세지 네비게이터",
-  "loading_order": 50,
+  "display_name": "알림 기록 패널 (Toast History)",
+  "loading_order": 100,
   "requires": [],
   "optional": [],
   "js": "index.js",
   "css": "style.css",
-  "author": "ChatGPT",
-  "version": "1.2.0"
+  "author": "ggang55158891-dev / ChatGPT",
+  "version": "1.0.0",
+  "homePage": "https://github.com/ggang55158891-dev/ST-Message-Navigator/tree/toast-history-wand-panel"
 }
