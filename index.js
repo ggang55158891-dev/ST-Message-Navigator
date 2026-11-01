@@ -2,6 +2,7 @@ import { SETTINGS_KEY, assignCustomTitle, findTarget } from './model.js';
 import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage } from './scroll.js';
 import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
+import { validPanelSize } from './panel-size.js';
 import { listAvailableBuildings, enterBuilding } from './buildings.js';
 import { Diagnostics } from './diagnostics.js';
 import { DEFAULT_SETTINGS, SETTINGS_FIELDS, normalizeSettings, diffSettings } from './settings-backup.js';
@@ -33,11 +34,13 @@ class NavigatorApp {
         this.navSerial = 0;
         this.busy = false;
         this.lastNavigated = -1;
+        this.lastLanding = null;
         this.cursor = new NavigationCursor();
         this.refreshTimer = null;
         this.listeners = [];
         this.chatElement = null;
         this.chatScrollHandler = () => {
+            if (this.lastLanding && Math.abs((this.chatElement?.scrollTop ?? 0) - this.lastLanding.scrollTop) > 2) this.lastLanding = null;
             if (this.busy || this.scrollRaf !== null) return;
             this.scrollRaf = requestAnimationFrame(() => {
                 this.scrollRaf = null;
@@ -53,6 +56,8 @@ class NavigatorApp {
             saveTitle: (index, title) => this.saveTitle(index, title),
             getPosition: () => this.settings.position,
             savePosition: position => this.changeSetting('position', position),
+            getPanelSize: () => this.settings.panelSize,
+            savePanelSize: size => this.changeSetting('panelSize', size),
             listBuildings: listAvailableBuildings,
             enterBuilding,
             getTheme: () => this.settings.elevatorTheme,
@@ -118,6 +123,7 @@ class NavigatorApp {
         if (key === 'mode' && !['visible', 'all'].includes(value)) return;
         if (key === 'side' && !['left', 'right'].includes(value)) return;
         if (key === 'position' && !validNavPosition(value)) return;
+        if (key === 'panelSize' && value !== null && !validPanelSize(value)) return;
         if (key === 'showNavigationButtons' && typeof value !== 'boolean') return;
         if (key === 'elevatorTheme' && !['classic', 'restricted', 'sky'].includes(value)) return;
         if (key === 'elevatorSky' && !['auto', 'day', 'night'].includes(value)) return;
@@ -128,6 +134,7 @@ class NavigatorApp {
             this.view.elevator?.applyTheme(this.settings.elevatorTheme, this.settings.elevatorSky);
         }
         if (key === 'showNavigationButtons') this.view.setNavigationButtonsVisible(value);
+        if (key === 'panelSize') this.view.position(this.settings.side);
         if (key === 'side') {
             // Choosing left/right restores the default placement.
             this.settings.position = null;
@@ -181,6 +188,7 @@ class NavigatorApp {
             this.navSerial++;
             this.busy = false;
             this.cursor.clear();
+            this.lastLanding = null;
             this.clearTargetHighlight();
             this.view.editing = -1;
             this.view.query = '';
@@ -226,16 +234,43 @@ class NavigatorApp {
     }
 
     async navigate(action) {
+        if (this.busy) return;
+        if (action !== 'last') this.lastLanding = null;
         const ctx = context();
         this.bindChatScroll();
         const base = this.cursor.resolve(this.chatElement, ctx.chat?.length || 0);
         const target = findTarget(ctx.chat || [], base, action, this.settings.mode);
         this.diagnostics.record('navigation', 'target_resolved', { status: target >= 0 ? 'ok' : 'skipped', targetIndex: target >= 0 ? target : undefined });
-        if (target >= 0) await this.goToIndex(target);
+        if (target < 0) return;
+        if (action === 'last') {
+            const landing = this.lastLanding;
+            if (landing && landing.chat === ctx.chat && landing.id === ctx.chatId &&
+                landing.index === target && this.chatElement &&
+                Math.abs(this.chatElement.scrollTop - landing.scrollTop) <= 2) {
+                this.lastLanding = null;
+                // The second press goes to the actual bottom of the chat.
+                this.chatElement.scrollTo({
+                    top: this.chatElement.scrollHeight - this.chatElement.clientHeight,
+                    behavior: 'instant',
+                });
+                this.cursor.set(this.chatElement, target);
+                this.view.setActive(target);
+                this.diagnostics.record('navigation', 'last_bottom', { status: 'ok', targetIndex: target });
+                return;
+            }
+        }
+        const reached = await this.goToIndex(target);
+        if (action === 'last' && reached && this.chatElement) {
+            this.lastLanding = {
+                chat: ctx.chat, id: ctx.chatId, index: target,
+                scrollTop: this.chatElement.scrollTop,
+            };
+        }
     }
 
     async goToIndex(index) {
-        if (this.busy) return;
+        this.lastLanding = null;
+        if (this.busy) return false;
         const initial = context();
         const chatRef = initial.chat;
         const chatId = initial.chatId;
@@ -261,6 +296,7 @@ class NavigatorApp {
             this.view.setActive(index, true);
             this.view.setStatus(`메시지 #${index}로 이동했습니다.`);
             this.diagnostics.record('navigation', 'jump_completed', { status: 'ok', targetIndex: index, durationMs: Date.now() - started });
+            return true;
         } catch (error) {
             if (!cancelled()) {
                 this.diagnostics.record('navigation', 'jump_failed', { status: 'error', targetIndex: index, error, durationMs: Date.now() - started });
@@ -323,6 +359,7 @@ class NavigatorApp {
         this.navSerial++;
         this.diagnostics.record('lifecycle', 'destroyed', { status: 'ok' });
         this.cursor.clear();
+        this.lastLanding = null;
         this.clearTargetHighlight();
         if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
         if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
@@ -340,7 +377,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.3.3)');
+        console.info(PREFIX, 'loaded (v1.4.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
