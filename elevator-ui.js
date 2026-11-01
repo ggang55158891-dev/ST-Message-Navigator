@@ -141,6 +141,8 @@ export class ElevatorPanel {
         const context = this.callbacks.context();
         const requestedScope = buildingScope(context);
         const id = ++this.requestId;
+        const started = Date.now();
+        this.callbacks.logDiagnostic?.('chat-switch', 'list_started', { status: 'started' });
         this.loading = true;
         this.buildingList.replaceChildren(element('p','stmn-building-empty','건물 목록을 불러오는 중…'));
         try {
@@ -150,9 +152,11 @@ export class ElevatorPanel {
             this.scope = result.scope;
             this.scopeLabel.textContent = result.title || '현재 캐릭터 또는 그룹';
             this.lastLoaded = Date.now();
+            this.callbacks.logDiagnostic?.('chat-switch', 'list_completed', { status: 'ok', count: this.buildings.length, durationMs: Date.now() - started });
             this.renderBuildings();
         } catch (error) {
             if (id !== this.requestId) return;
+            this.callbacks.logDiagnostic?.('chat-switch', 'list_failed', { status: 'error', error, durationMs: Date.now() - started });
             this.buildingList.replaceChildren(element('p', 'stmn-building-empty',
                 '건물 목록을 불러오지 못했어요: ' + (error?.message || '알 수 없는 오류')));
             console.warn('[STMN Elevator] building list error', error);
@@ -210,6 +214,8 @@ export class ElevatorPanel {
             return;
         }
         this.busy = true;
+        const started = Date.now();
+        this.callbacks.logDiagnostic?.('chat-switch', 'switch_started', { status: 'started' });
         this.renderBuildings();
         this.view.setStatus('엘리베이터 이동 중 · ' + item.name);
         try {
@@ -222,7 +228,9 @@ export class ElevatorPanel {
             this.updateFloor(this.view.currentIndex);
             this.setTab('floors');
             this.view.setStatus('새 건물 도착 · ' + item.name);
+            this.callbacks.logDiagnostic?.('chat-switch', 'switch_completed', { status: 'ok', durationMs: Date.now() - started });
         } catch (error) {
+            this.callbacks.logDiagnostic?.('chat-switch', 'switch_failed', { status: 'error', error, durationMs: Date.now() - started });
             console.warn('[STMN Elevator] chat switch error', error);
             this.view.setStatus(error?.message || '채팅 전환에 실패했어요.', true);
         } finally {

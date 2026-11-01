@@ -383,3 +383,38 @@
 @media (prefers-reduced-motion: reduce) {
     #stmn-root .stmn-building-card { transition: none; }
 }
+
+/* Privacy-first diagnostic controls live inside the extension settings only. */
+#stmn-settings .stmn-diagnostics {
+    margin-top: 12px;
+    padding: 8px 0;
+    border-top: 1px solid var(--SmartThemeBorderColor, #777);
+}
+#stmn-settings .stmn-diagnostics > summary { cursor: pointer; }
+#stmn-settings .stmn-diagnostics-body { display: grid; gap: 8px; padding: 8px 0 3px; }
+#stmn-settings .stmn-diagnostics-body p { margin: 0; font-size: 12px; line-height: 1.5; }
+#stmn-settings .stmn-diagnostics-toggle { display: inline-flex; gap: 7px; align-items: center; font-size: 12px; cursor: pointer; }
+#stmn-settings .stmn-diagnostics-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+#stmn-settings .stmn-diagnostics-actions button {
+    padding: 5px 8px;
+    border: 1px solid var(--SmartThemeBorderColor, #777);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+}
+#stmn-settings .stmn-diagnostics-preview {
+    margin: 0;
+    padding: 8px;
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 10px;
+    line-height: 1.4;
+    border: 1px solid var(--SmartThemeBorderColor, #777);
+    border-radius: 6px;
+}
+#stmn-settings .stmn-diagnostics-preview[hidden] { display: none !important; }
