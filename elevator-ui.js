@@ -120,6 +120,7 @@ export class ElevatorPanel {
         this.view.caption.hidden = buildings;
         this.view.searchbox.hidden = buildings;
         this.view.list.hidden = buildings;
+        this.view.outlineJumps.hidden = buildings;
         this.view.groupTools.hidden = buildings;
         this.buildingsPane.hidden = !buildings;
         if (!buildings) {
