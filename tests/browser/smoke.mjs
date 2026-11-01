@@ -252,6 +252,7 @@ async function run() {
                         orphanTitles: 0, duplicateMessageIds: 0, invalidTitles: 0, malformedStore: false }),
                 });
             });
+            await page.locator('.stmn-backup-settings > summary').click();
             const file = page.locator('#stmn-backup-file');
             await file.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
             assert.equal(await page.getByRole('button', { name: '선택한 설정 복원' }).isDisabled(), true);
