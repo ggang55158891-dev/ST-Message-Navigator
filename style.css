@@ -418,3 +418,26 @@
     border-radius: 6px;
 }
 #stmn-settings .stmn-diagnostics-preview[hidden] { display: none !important; }
+
+/* A-03: backup controls loaded only inside extension settings. */
+#stmn-settings .stmn-backup-settings { margin-top: 12px; padding: 8px 0; border-top: 1px solid var(--SmartThemeBorderColor, #777); }
+#stmn-settings .stmn-backup-settings > summary { cursor: pointer; }
+#stmn-settings .stmn-backup-body { display: grid; gap: 9px; padding: 10px 0 4px; }
+#stmn-settings .stmn-backup-body p { margin: 0; font-size: 12px; line-height: 1.5; }
+#stmn-settings .stmn-backup-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#stmn-settings .stmn-backup-actions button,
+#stmn-settings .stmn-backup-body > button {
+    border: 1px solid var(--SmartThemeBorderColor, #777); border-radius: 6px;
+    background: transparent; color: inherit; padding: 5px 8px; cursor: pointer; font: inherit; font-size: 11px;
+}
+#stmn-settings .stmn-backup-body > button:disabled { opacity: .45; cursor: default; }
+#stmn-settings .stmn-backup-body > label { font-size: 12px; }
+#stmn-settings .stmn-backup-body > input[type="file"] { font-size: 11px; width: 100%; max-width: 100%; }
+#stmn-settings .stmn-backup-confirm { display: flex; align-items: center; gap: 6px; }
+#stmn-settings .stmn-backup-confirm[hidden] { display: none !important; }
+#stmn-settings .stmn-backup-preview {
+    white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.4;
+    max-height: 210px; overflow: auto; padding: 8px; margin: 0;
+    border: 1px solid var(--SmartThemeBorderColor, #777); border-radius: 6px;
+}
+#stmn-settings .stmn-backup-preview[hidden] { display: none !important; }
