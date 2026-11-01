@@ -27,6 +27,24 @@ export function findTarget(chat, current, direction, mode = 'visible') {
     return -1;
 }
 
+// Intl.Segmenter initialization is relatively expensive. Reuse one instance
+// across title extraction calls instead of constructing it for each message.
+let sharedSentenceSegmenter;
+let segmenterInitialized = false;
+function sentenceSegmenter() {
+    if (!segmenterInitialized) {
+        segmenterInitialized = true;
+        try {
+            if (typeof Intl?.Segmenter === 'function') {
+                sharedSentenceSegmenter = new Intl.Segmenter('ko', { granularity: 'sentence' });
+            }
+        } catch {
+            sharedSentenceSegmenter = undefined;
+        }
+    }
+    return sharedSentenceSegmenter;
+}
+
 function plainText(text) {
     return String(text ?? '')
         .replace(/```[\s\S]*?```/g, ' ')
@@ -44,9 +62,10 @@ export function automaticTitle(message, maxLength = 68) {
     const text = plainText(message?.mes);
     if (!text) return message?.extra?.image || message?.extra?.file ? '(이미지/첨부 메시지)' : '(내용 없는 메시지)';
     let sentence = '';
-    if (typeof Intl?.Segmenter === 'function') {
+    const segmenter = sentenceSegmenter();
+    if (segmenter) {
         try {
-            const parts = new Intl.Segmenter('ko', { granularity: 'sentence' }).segment(text);
+            const parts = segmenter.segment(text);
             sentence = parts[Symbol.iterator]().next().value?.segment?.trim() || '';
         } catch { /* Fall through to punctuation-based extraction. */ }
     }
