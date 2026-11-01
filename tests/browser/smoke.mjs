@@ -82,6 +82,7 @@ async function setupPage(browser, baseURL, messageCount = 23, size = { width: 12
         window.__stmnContext = context;
         window.__stmnActions = [];
         window.__stmnPosition = null;
+        window.__stmnPanelSize = null;
         const callbacks = {
             context: () => context,
             hasChat: () => true,
@@ -91,6 +92,8 @@ async function setupPage(browser, baseURL, messageCount = 23, size = { width: 12
             saveTitle: async () => undefined,
             getPosition: () => window.__stmnPosition,
             savePosition: position => { window.__stmnPosition = position; },
+            getPanelSize: () => window.__stmnPanelSize,
+            savePanelSize: size => { window.__stmnPanelSize = size; },
             listBuildings: async () => ({
                 scope: 'character:none', title: 'Character',
                 buildings: [
@@ -149,6 +152,7 @@ async function run() {
             const page = await setup(23);
             await page.locator('[data-action="outline"]').click();
             assert.match(await page.locator('.stmn-count').innerText(), /23/);
+            await page.getByRole('button', { name: /목차 맨 위/ }).click();
             assert.match(await page.locator('.stmn-group-toggle').first().innerText(), /#0.*#9/);
             await page.locator('.stmn-search-input').fill('#4');
             assert.equal(await page.locator('.stmn-row').count(), 1);
@@ -269,6 +273,66 @@ async function run() {
                 theme: window.__currentSettings.elevatorTheme,
                 mode: window.__currentSettings.mode,
             })), { count: 1, theme: 'sky', mode: 'all' });
+        });
+
+        await check('opening outline starts at newest message and expands last group', async setup => {
+            const page = await setup(42);
+            await page.evaluate(() => window.__stmnView.groupCollapsed.add(40));
+            await page.locator('[data-action="outline"]').click();
+            const view = await page.evaluate(() => ({
+                expanded: !window.__stmnView.groupCollapsed.has(40),
+                lastVisible: !!document.querySelector('.stmn-row[data-index="41"]'),
+                nearEnd: Math.abs(window.__stmnView.list.scrollTop -
+                    (window.__stmnView.list.scrollHeight - window.__stmnView.list.clientHeight)) <= 2,
+            }));
+            assert.equal(view.expanded, true);
+            assert.equal(view.lastVisible, true);
+            assert.equal(view.nearEnd, true);
+        });
+
+        await check('outline top/bottom controls scroll list, not SillyTavern chat', async setup => {
+            const page = await setup(130);
+            await page.locator('[data-action="outline"]').click();
+            await page.evaluate(() => document.querySelector('#chat').scrollTop = 123);
+            await page.getByRole('button', { name: /목차 맨 위/ }).click();
+            assert.equal(await page.evaluate(() => window.__stmnView.list.scrollTop), 0);
+            await page.getByRole('button', { name: /목차 맨 아래/ }).click();
+            const end = await page.evaluate(() => ({
+                listAtEnd: Math.abs(window.__stmnView.list.scrollTop -
+                    (window.__stmnView.list.scrollHeight - window.__stmnView.list.clientHeight)) <= 2,
+                chatScroll: document.querySelector('#chat').scrollTop,
+            }));
+            assert.equal(end.listAtEnd, true);
+            assert.equal(end.chatScroll, 0);
+            await page.getByRole('tab', { name: '건물 로비' }).click();
+            assert.equal(await page.locator('.stmn-outline-jumps').isVisible(), false);
+        });
+
+        await check('panel resize saves only on pointer release and clamps to viewport', async setup => {
+            const page = await setup(60);
+            await page.locator('[data-action="outline"]').click();
+            const handle = page.locator('.stmn-panel-resize');
+            const original = await page.locator('.stmn-outline').boundingBox();
+            const rect = await handle.boundingBox();
+            assert.ok(rect);
+            await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(rect.x + rect.width / 2 + 90, rect.y + rect.height / 2 + 60, { steps: 5 });
+            assert.equal(await page.evaluate(() => window.__stmnPanelSize), null);
+            await page.mouse.up();
+            const changed = await page.evaluate(() => ({
+                saved: window.__stmnPanelSize,
+                width: document.querySelector('.stmn-outline').getBoundingClientRect().width,
+                height: document.querySelector('.stmn-outline').getBoundingClientRect().height,
+            }));
+            assert.ok(changed.saved?.width > original.width + 35);
+            assert.ok(changed.saved?.height > original.height + 15);
+            assert.ok(changed.width > original.width);
+            assert.ok(changed.height > original.height);
+            await page.setViewportSize({ width: 375, height: 667 });
+            const clamped = await page.locator('.stmn-outline').boundingBox();
+            assert.ok(clamped.x >= 0 && clamped.x + clamped.width <= 375);
+            assert.ok(clamped.y + clamped.height <= 667);
         });
 
         await check('10000 messages keep DOM list virtualized', async setup => {
