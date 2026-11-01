@@ -20,3 +20,20 @@ jobs:
           done
       - name: Run unit tests
         run: node --experimental-default-type=module --test tests/*.test.mjs
+
+
+  browser-smoke:
+    # Test-only tooling: not imported or installed by the SillyTavern extension.
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify system Chrome
+        run: google-chrome --version
+      - name: Install lightweight test driver (no browser download)
+        run: npm install --no-save --no-package-lock --ignore-scripts playwright-core@1.56.0
+      - name: Run real-Chromium UI smoke tests
+        run: node tests/browser/smoke.mjs
