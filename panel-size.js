@@ -14,7 +14,7 @@ export function validPanelSize(size) {
 
 export function fitPanelSize(size, viewportWidth, viewportHeight) {
     const maxWidth = Math.max(1, Math.min(PANEL_MAX_WIDTH, viewportWidth - 24));
-    const maxHeight = Math.max(1, Math.min(PANEL_MAX_HEIGHT, viewportHeight - 16));
+    const maxHeight = Math.max(1, Math.min(PANEL_MAX_HEIGHT, viewportHeight - viewportHeight * 0.08 - 8));
     const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
     // Screens narrower than the minimum retain usable, non-overflowing width.
     const minWidth = Math.min(PANEL_MIN_WIDTH, maxWidth);
