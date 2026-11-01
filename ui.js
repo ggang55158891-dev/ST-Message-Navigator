@@ -3,6 +3,7 @@ import { ElevatorPanel } from './elevator-ui.js';
 import { installDiagnosticsSettings } from './diagnostics-ui.js';
 import { installSettingsBackupUI } from './settings-backup-ui.js';
 import { constrainNavPosition, fromRelativeNavPosition, toRelativeNavPosition } from './position.js';
+import { PANEL_MIN_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_WIDTH, PANEL_MAX_HEIGHT, fitPanelSize } from './panel-size.js';
 import { GROUP_SIZE, MESSAGE_ROW_HEIGHT, buildOutlineRows, filterOutlineEntries, findOutlineRow } from './outline.js';
 
 const BUTTONS = [
@@ -169,10 +170,21 @@ export class NavigatorView {
         this.spacer = el('div', 'stmn-list-spacer');
         this.list.append(this.spacer);
         this.list.addEventListener('scroll', () => this.scheduleRows(), { passive: true });
+        this.outlineJumps = el('div', 'stmn-outline-jumps');
+        this.outlineTop = el('button', 'stmn-outline-jump', '↑ 목차 맨 위');
+        this.outlineBottom = el('button', 'stmn-outline-jump', '↓ 목차 맨 아래');
+        for (const b of [this.outlineTop, this.outlineBottom]) b.type = 'button';
+        this.outlineTop.addEventListener('click', () => this.scrollOutlineToStart());
+        this.outlineBottom.addEventListener('click', () => this.scrollOutlineToEnd());
+        this.outlineJumps.append(this.outlineTop, this.outlineBottom);
         this.footer = el('div', 'stmn-footer', '');
         this.footer.setAttribute('role', 'status');
         this.searchbox = searchbox;
-        this.panel.append(header, this.caption, searchbox, this.groupTools, this.list, this.footer);
+        this.panelResize = el('div', 'stmn-panel-resize');
+        this.panelResize.setAttribute('role', 'separator');
+        this.panelResize.setAttribute('aria-label', '패널 크기 조절');
+        this.panelResize.title = '드래그하여 패널 크기 변경';
+        this.panel.append(header, this.caption, searchbox, this.groupTools, this.list, this.outlineJumps, this.footer, this.panelResize);
         this.elevator = new ElevatorPanel(this, callbacks);
         this.root.append(this.nav, this.panel);
         document.body.append(this.root);
@@ -183,6 +195,7 @@ export class NavigatorView {
         this.boundResize = () => this.position();
         window.addEventListener('resize', this.boundResize, { passive: true });
         this.installDragging();
+        this.installPanelResizing();
         this.position();
     }
 
@@ -228,7 +241,12 @@ export class NavigatorView {
         this.root.style.setProperty('--stmn-nav-left', String(Math.round(point.left)) + 'px');
         this.root.style.setProperty('--stmn-nav-top', String(Math.round(point.centerY)) + 'px');
 
-        const panelWidth = Math.min(400, width - 24);
+        const panelSize = this.previewPanelSize || fitPanelSize(
+            this.callbacks.getPanelSize?.(), width, window.innerHeight,
+        );
+        this.root.style.setProperty('--stmn-panel-width', panelSize.width + 'px');
+        this.root.style.setProperty('--stmn-panel-height', panelSize.height + 'px');
+        const panelWidth = panelSize.width;
         let panelLeft = point.left + size.width + 12;
         if (panelLeft + panelWidth > width - 8) panelLeft = point.left - panelWidth - 12;
         if (panelLeft < 8) panelLeft = width > 650 ? width - panelWidth - 8 : 8;
@@ -301,6 +319,67 @@ export class NavigatorView {
         window.addEventListener('pointercancel', this.onNavPointerEnd);
     }
 
+    installPanelResizing() {
+        this.resizeDrag = null;
+        this.onPanelResizeDown = event => {
+            if (event.button !== 0 || this.resizeDrag) return;
+            const rect = this.panel.getBoundingClientRect();
+            this.resizeDrag = {
+                pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+                width: rect.width, height: rect.height, active: false,
+            };
+            this.panelResize.setPointerCapture?.(event.pointerId);
+            event.preventDefault();
+        };
+        this.onPanelResizeMove = event => {
+            const drag = this.resizeDrag;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            const dx = event.clientX - drag.startX;
+            const dy = event.clientY - drag.startY;
+            if (!drag.active && Math.hypot(dx, dy) < 3) return;
+            drag.active = true;
+            // Only CSS dimensions are updated while dragging; never rebuild
+            // chat lists or persist settings for every pointermove.
+            this.previewPanelSize = fitPanelSize({
+                width: Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, Math.round(drag.width + dx))),
+                height: Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, Math.round(drag.height + dy))),
+            }, window.innerWidth, window.innerHeight);
+            this.position(this.side);
+            if (event.cancelable) event.preventDefault();
+        };
+        this.onPanelResizeEnd = event => {
+            const drag = this.resizeDrag;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            this.resizeDrag = null;
+            const value = this.previewPanelSize;
+            this.previewPanelSize = null;
+            if (event.type !== 'pointercancel' && drag.active && value) {
+                this.callbacks.savePanelSize?.(value);
+            }
+            this.position(this.side);
+        };
+        this.panelResize.addEventListener('pointerdown', this.onPanelResizeDown);
+        window.addEventListener('pointermove', this.onPanelResizeMove);
+        window.addEventListener('pointerup', this.onPanelResizeEnd);
+        window.addEventListener('pointercancel', this.onPanelResizeEnd);
+    }
+
+    scrollOutlineToStart() {
+        if (this.elevator?.tab === 'buildings') return;
+        this.list.scrollTop = 0;
+        this.renderRows(true);
+    }
+
+    scrollOutlineToEnd({ expandLast = true } = {}) {
+        if (this.elevator?.tab === 'buildings') return;
+        if (expandLast && !this.query && this.entries.length) {
+            const lastStart = Math.floor((this.entries.length - 1) / GROUP_SIZE) * GROUP_SIZE;
+            if (this.groupCollapsed.delete(lastStart)) this.applyFilter({ resetScroll: false });
+        }
+        this.list.scrollTop = Math.max(0, this.list.scrollHeight - this.list.clientHeight);
+        this.renderRows(true);
+    }
+
     setActive(index, busy = false) {
         this.currentIndex = index;
         this.navButtons.get('outline')?.setAttribute('aria-expanded', String(this.panelOpen));
@@ -325,6 +404,7 @@ export class NavigatorView {
             this.elevator?.onShow();
             this.panel.focus({ preventScroll: true });
             this.position(this.side);
+            if (this.elevator?.tab === 'floors') this.scrollOutlineToEnd();
         }
     }
 
@@ -513,6 +593,10 @@ export class NavigatorView {
 
     destroy() {
         if (this.raf !== null) cancelAnimationFrame(this.raf);
+        this.panelResize.removeEventListener('pointerdown', this.onPanelResizeDown);
+        window.removeEventListener('pointermove', this.onPanelResizeMove);
+        window.removeEventListener('pointerup', this.onPanelResizeEnd);
+        window.removeEventListener('pointercancel', this.onPanelResizeEnd);
         if (this.clickGuardTimer !== undefined) clearTimeout(this.clickGuardTimer);
         document.removeEventListener('keydown', this.onKeydown);
         window.removeEventListener('resize', this.boundResize);

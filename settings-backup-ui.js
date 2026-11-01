@@ -60,7 +60,7 @@ export function installSettingsBackupUI(host, { readSettings, restoreSettings, i
 
     exportButton.addEventListener('click', () => {
         try {
-            downloadBackup(createSettingsBackup(readSettings(), { version: '1.3.3' }));
+            downloadBackup(createSettingsBackup(readSettings(), { version: '1.4.0' }));
             feedback.textContent = '현재 확장 설정의 JSON 다운로드를 요청했습니다.';
         } catch {
             feedback.textContent = '설정 백업 다운로드에 실패했습니다.';
