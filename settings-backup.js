@@ -1,5 +1,6 @@
 /** Versioned, small, settings-only backups. Pure functions; no chat mutations. */
 import { validNavPosition } from './position.js';
+import { validPanelSize } from './panel-size.js';
 
 export const BACKUP_KIND = 'stmn-extension-settings';
 export const BACKUP_SCHEMA_VERSION = 1;
@@ -13,6 +14,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     elevatorTheme: 'classic',
     elevatorSky: 'auto',
     diagnosticsEnabled: false,
+    panelSize: null,
 });
 export const SETTINGS_FIELDS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
 const OPTIONS = Object.freeze({
@@ -36,15 +38,17 @@ export function normalizeSettings(raw) {
         if (typeof source[key] === 'boolean') out[key] = source[key];
     }
     if (validNavPosition(source.position)) out.position = { x: source.position.x, y: source.position.y };
+    if (validPanelSize(source.panelSize)) out.panelSize = { width: source.panelSize.width, height: source.panelSize.height };
     return out;
 }
 
 function validateSettings(raw) {
     if (!isObject(raw)) throw new Error('설정 데이터 형식이 올바르지 않습니다.');
     const keys = Object.keys(raw);
-    if (keys.length !== SETTINGS_FIELDS.length ||
-        keys.some(key => !SETTINGS_FIELDS.includes(key)) ||
-        SETTINGS_FIELDS.some(key => !has(raw, key))) {
+    // v1.3.3 backup files had seven fields. panelSize was introduced later:
+    // it is the ONLY optional legacy key; never silently discard other fields.
+    if (keys.some(key => !SETTINGS_FIELDS.includes(key)) ||
+        SETTINGS_FIELDS.some(key => key !== 'panelSize' && !has(raw, key))) {
         throw new Error('백업 설정 항목이 누락되었거나 지원되지 않는 항목이 있습니다.');
     }
     for (const [key, values] of Object.entries(OPTIONS)) {
@@ -60,6 +64,9 @@ function validateSettings(raw) {
         Object.keys(raw.position).length !== 2 ||
         !has(raw.position, 'x') || !has(raw.position, 'y')
     )) throw new Error('버튼 위치 데이터에 알 수 없는 값이 있습니다.');
+    if (has(raw, 'panelSize') && raw.panelSize !== null && !validPanelSize(raw.panelSize)) {
+        throw new Error('저장된 패널 크기가 유효하지 않습니다.');
+    }
     return normalizeSettings(raw);
 }
 
