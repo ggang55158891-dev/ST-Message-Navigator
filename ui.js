@@ -334,12 +334,16 @@ export class NavigatorView {
         if (!this.panelOpen) return;
         const oldScroll = this.list.scrollTop;
         const context = this.callbacks.context();
-        this.entries = (context.chat || []).map((message, index) => ({
-            message, index,
-            title: getTitle(message, context.chatMetadata),
-            custom: isCustomTitle(message, context.chatMetadata),
-            searchable: `${message?.name || ''} ${getTitle(message, context.chatMetadata)} ${String(message?.mes || '').slice(0, 1500)}`.toLocaleLowerCase(),
-        }));
+        this.entries = (context.chat || []).map((message, index) => {
+            // Resolve title once per message; the searchable string uses the
+            // same value rather than running sentence segmentation twice.
+            const title = getTitle(message, context.chatMetadata);
+            return {
+                message, index, title,
+                custom: isCustomTitle(message, context.chatMetadata),
+                searchable: `${message?.name || ''} ${title} ${String(message?.mes || '').slice(0, 1500)}`.toLocaleLowerCase(),
+            };
+        });
         this.applyFilter({ resetScroll: !keepScroll });
         if (keepScroll) {
             this.list.scrollTop = oldScroll;
