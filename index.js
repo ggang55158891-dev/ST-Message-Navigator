@@ -4,9 +4,10 @@ import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
 import { listAvailableBuildings, enterBuilding } from './buildings.js';
 import { Diagnostics } from './diagnostics.js';
+import { DEFAULT_SETTINGS, SETTINGS_FIELDS, normalizeSettings, diffSettings } from './settings-backup.js';
+import { inspectTitleMetadata } from './metadata-audit.js';
 
 const PREFIX = '[ST Message Navigator]';
-const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null, showNavigationButtons: true, elevatorTheme: 'classic', elevatorSky: 'auto', diagnosticsEnabled: false });
 let app;
 
 function context() { return SillyTavern.getContext(); }
@@ -16,17 +17,12 @@ function getSettings() {
         throw new Error('실리태번 확장 설정을 사용할 수 없습니다.');
     }
     const root = ctx.extensionSettings;
-    if (!root[SETTINGS_KEY] || typeof root[SETTINGS_KEY] !== 'object') {
+    if (!root[SETTINGS_KEY] || typeof root[SETTINGS_KEY] !== 'object' || Array.isArray(root[SETTINGS_KEY])) {
         root[SETTINGS_KEY] = { ...DEFAULT_SETTINGS };
     }
     const settings = root[SETTINGS_KEY];
-    if (!['visible', 'all'].includes(settings.mode)) settings.mode = 'visible';
-    if (!['left', 'right'].includes(settings.side)) settings.side = 'right';
-    if (!validNavPosition(settings.position)) settings.position = null;
-    if (typeof settings.showNavigationButtons !== 'boolean') settings.showNavigationButtons = true;
-    if (!['classic', 'restricted', 'sky'].includes(settings.elevatorTheme)) settings.elevatorTheme = 'classic';
-    if (!['auto', 'day', 'night'].includes(settings.elevatorSky)) settings.elevatorSky = 'auto';
-    if (typeof settings.diagnosticsEnabled !== 'boolean') settings.diagnosticsEnabled = false;
+    // Validate legacy settings without deleting any unknown, future keys.
+    Object.assign(settings, normalizeSettings(settings));
     return settings;
 }
 
@@ -65,7 +61,17 @@ class NavigatorApp {
         });
         this.view.setNavigationButtonsVisible(this.settings.showNavigationButtons);
         this.view.position(this.settings.side);
-        installSettings(context(), this.settings, (key, value) => this.changeSetting(key, value), this.diagnostics);
+        this.syncSettingsUI = installSettings(
+            context(), this.settings, (key, value) => this.changeSetting(key, value), this.diagnostics,
+            {
+                readSettings: () => this.settings,
+                restoreSettings: next => this.restoreSettings(next),
+                inspectTitles: () => {
+                    const ctx = context();
+                    return inspectTitleMetadata(ctx.chat, ctx.chatMetadata);
+                },
+            },
+        );
         this.bindChatScroll();
         this.bindEvents();
         this.updateCurrent();
@@ -129,6 +135,37 @@ class NavigatorApp {
         }
         context().saveSettingsDebounced?.();
         if (key !== 'position') this.updateCurrent();
+    }
+
+    /**
+     * Validated settings-only restore: no chat mutation, no other settings.
+     * Reverts the visible UI and settings if applying or requesting save fails.
+     */
+    restoreSettings(next) {
+        const changes = diffSettings(this.settings, next);
+        const previous = normalizeSettings(this.settings);
+        const ctx = context();
+        if (typeof ctx.saveSettingsDebounced !== 'function') {
+            throw new Error('현재 SillyTavern에서 설정 저장 함수를 사용할 수 없습니다.');
+        }
+        const apply = source => {
+            for (const key of SETTINGS_FIELDS) this.settings[key] = source[key];
+            this.diagnostics.setEnabled(this.settings.diagnosticsEnabled);
+            this.view.elevator?.applyTheme(this.settings.elevatorTheme, this.settings.elevatorSky);
+            this.view.setNavigationButtonsVisible(this.settings.showNavigationButtons);
+            this.view.position(this.settings.side);
+            this.syncSettingsUI?.();
+            this.updateCurrent();
+        };
+        try {
+            apply(next);
+            if (changes.length) ctx.saveSettingsDebounced();
+            this.diagnostics.record('save', 'settings_restored', { status: 'ok', count: changes.length });
+        } catch (error) {
+            try { apply(previous); } catch { /* preserve original error */ }
+            this.diagnostics.record('save', 'settings_restore_failed', { status: 'error', error });
+            throw error;
+        }
     }
 
     bindEvents() {
@@ -303,7 +340,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.3.1)');
+        console.info(PREFIX, 'loaded (v1.3.3)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
