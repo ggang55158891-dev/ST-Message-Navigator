@@ -199,6 +199,39 @@ async function run() {
             assert.equal(state.isOpen, false, 'Drag must not open the panel');
         });
 
+        await check('cached titles refresh after text and metadata edits', async setup => {
+            const page = await setup(1000);
+            await page.locator('[data-action="outline"]').click();
+            const cacheReuse = await page.evaluate(() => {
+                const view = window.__stmnView;
+                const context = window.__stmnContext;
+                const message = context.chat[4];
+                const before = view.outlineEntryCache.get(message);
+                view.rebuild({ keepScroll: true });
+                const again = view.outlineEntryCache.get(message);
+                message.mes = '수정된 메시지 내용입니다.';
+                view.rebuild({ keepScroll: true });
+                const afterText = view.outlineEntryCache.get(message);
+                message.stmn_message_id_v1 = 'manual-title-4';
+                context.chatMetadata.stmn_message_outline_v1 = { titles: { 'manual-title-4': '새로운 개인 제목' } };
+                view.rebuild({ keepScroll: true });
+                const afterMetadata = view.outlineEntryCache.get(message);
+                return {
+                    reused: before === again,
+                    invalidatedText: again !== afterText,
+                    invalidatedTitle: afterText !== afterMetadata,
+                    title: afterMetadata.title,
+                };
+            });
+            assert.equal(cacheReuse.reused, true);
+            assert.equal(cacheReuse.invalidatedText, true);
+            assert.equal(cacheReuse.invalidatedTitle, true);
+            assert.equal(cacheReuse.title, '새로운 개인 제목');
+            await page.locator('.stmn-search-input').fill('새로운 개인 제목');
+            assert.equal(await page.locator('.stmn-row').count(), 1);
+            assert.equal(await page.locator('.stmn-row').getAttribute('data-index'), '4');
+        });
+
         await check('10000 messages keep DOM list virtualized', async setup => {
             const page = await setup(10000);
             await page.locator('[data-action="outline"]').click();
