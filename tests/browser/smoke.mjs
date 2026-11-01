@@ -232,6 +232,44 @@ async function run() {
             assert.equal(await page.locator('.stmn-row').getAttribute('data-index'), '4');
         });
 
+        await check('settings backup import previews, rejects bad files and applies only after consent', async setup => {
+            const page = await setup(23);
+            await page.evaluate(async () => {
+                const { installSettingsBackupUI } = await import('/settings-backup-ui.js');
+                const { createSettingsBackup, DEFAULT_SETTINGS } = await import('/settings-backup.js');
+                window.__currentSettings = { ...DEFAULT_SETTINGS };
+                window.__restoreCalls = 0;
+                window.__settingsBackupJSON = createSettingsBackup({
+                    ...DEFAULT_SETTINGS, mode: 'all', elevatorTheme: 'sky',
+                }, { version: '1.3.3' });
+                installSettingsBackupUI(document.getElementById('extensions_settings2'), {
+                    readSettings: () => window.__currentSettings,
+                    restoreSettings: settings => {
+                        window.__restoreCalls++;
+                        Object.assign(window.__currentSettings, settings);
+                    },
+                    inspectTitles: () => ({ messages: 23, customTitles: 0,
+                        orphanTitles: 0, duplicateMessageIds: 0, invalidTitles: 0, malformedStore: false }),
+                });
+            });
+            const file = page.locator('#stmn-backup-file');
+            await file.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{broken') });
+            assert.equal(await page.getByRole('button', { name: '선택한 설정 복원' }).isDisabled(), true);
+            assert.equal(await page.evaluate(() => window.__restoreCalls), 0);
+            const good = await page.evaluate(() => window.__settingsBackupJSON);
+            await file.setInputFiles({ name: 'good.json', mimeType: 'application/json', buffer: Buffer.from(good) });
+            await page.locator('.stmn-backup-confirm input').waitFor({ state: 'visible' });
+            assert.equal(await page.getByRole('button', { name: '선택한 설정 복원' }).isDisabled(), true);
+            assert.match(await page.locator('.stmn-backup-preview').innerText(), /elevatorTheme/);
+            await page.locator('.stmn-backup-confirm input').check();
+            await page.getByRole('button', { name: '선택한 설정 복원' }).click();
+            assert.deepEqual(await page.evaluate(() => ({
+                count: window.__restoreCalls,
+                theme: window.__currentSettings.elevatorTheme,
+                mode: window.__currentSettings.mode,
+            })), { count: 1, theme: 'sky', mode: 'all' });
+        });
+
         await check('10000 messages keep DOM list virtualized', async setup => {
             const page = await setup(10000);
             await page.locator('[data-action="outline"]').click();
