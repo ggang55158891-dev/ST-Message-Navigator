@@ -3,9 +3,10 @@ import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMes
 import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
 import { listAvailableBuildings, enterBuilding } from './buildings.js';
+import { Diagnostics } from './diagnostics.js';
 
 const PREFIX = '[ST Message Navigator]';
-const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null, showNavigationButtons: true, elevatorTheme: 'classic', elevatorSky: 'auto' });
+const DEFAULT_SETTINGS = Object.freeze({ mode: 'visible', side: 'right', position: null, showNavigationButtons: true, elevatorTheme: 'classic', elevatorSky: 'auto', diagnosticsEnabled: false });
 let app;
 
 function context() { return SillyTavern.getContext(); }
@@ -25,12 +26,14 @@ function getSettings() {
     if (typeof settings.showNavigationButtons !== 'boolean') settings.showNavigationButtons = true;
     if (!['classic', 'restricted', 'sky'].includes(settings.elevatorTheme)) settings.elevatorTheme = 'classic';
     if (!['auto', 'day', 'night'].includes(settings.elevatorSky)) settings.elevatorSky = 'auto';
+    if (typeof settings.diagnosticsEnabled !== 'boolean') settings.diagnosticsEnabled = false;
     return settings;
 }
 
 class NavigatorApp {
     constructor() {
         this.settings = getSettings();
+        this.diagnostics = new Diagnostics({ enabled: this.settings.diagnosticsEnabled });
         this.navSerial = 0;
         this.busy = false;
         this.lastNavigated = -1;
@@ -58,14 +61,16 @@ class NavigatorApp {
             enterBuilding,
             getTheme: () => this.settings.elevatorTheme,
             getSkyMode: () => this.settings.elevatorSky,
+            logDiagnostic: (category, code, details) => this.diagnostics.record(category, code, details),
         });
         this.view.setNavigationButtonsVisible(this.settings.showNavigationButtons);
         this.view.position(this.settings.side);
-        installSettings(context(), this.settings, (key, value) => this.changeSetting(key, value));
+        installSettings(context(), this.settings, (key, value) => this.changeSetting(key, value), this.diagnostics);
         this.bindChatScroll();
         this.bindEvents();
         this.updateCurrent();
         this.view.rebuild();
+        this.diagnostics.record('lifecycle', 'initialized', { status: 'ok' });
     }
 
     hasChat() {
@@ -110,7 +115,9 @@ class NavigatorApp {
         if (key === 'showNavigationButtons' && typeof value !== 'boolean') return;
         if (key === 'elevatorTheme' && !['classic', 'restricted', 'sky'].includes(value)) return;
         if (key === 'elevatorSky' && !['auto', 'day', 'night'].includes(value)) return;
+        if (key === 'diagnosticsEnabled' && typeof value !== 'boolean') return;
         this.settings[key] = value;
+        if (key === 'diagnosticsEnabled') this.diagnostics.setEnabled(value);
         if (key === 'elevatorTheme' || key === 'elevatorSky') {
             this.view.elevator?.applyTheme(this.settings.elevatorTheme, this.settings.elevatorSky);
         }
@@ -133,6 +140,7 @@ class NavigatorApp {
             this.listeners.push([events[key], cb]);
         };
         register('CHAT_CHANGED', () => {
+            this.diagnostics.record('lifecycle', 'chat_changed', { status: 'ok' });
             this.navSerial++;
             this.busy = false;
             this.cursor.clear();
@@ -185,6 +193,7 @@ class NavigatorApp {
         this.bindChatScroll();
         const base = this.cursor.resolve(this.chatElement, ctx.chat?.length || 0);
         const target = findTarget(ctx.chat || [], base, action, this.settings.mode);
+        this.diagnostics.record('navigation', 'target_resolved', { status: target >= 0 ? 'ok' : 'skipped', targetIndex: target >= 0 ? target : undefined });
         if (target >= 0) await this.goToIndex(target);
     }
 
@@ -195,13 +204,18 @@ class NavigatorApp {
         const chatId = initial.chatId;
         if (!Array.isArray(chatRef) || !chatRef[index] || !Number.isInteger(index)) return;
         const token = ++this.navSerial;
+        const started = Date.now();
+        this.diagnostics.record('navigation', 'jump_started', { status: 'started', targetIndex: index });
         this.busy = true;
         this.view.setActive(this.lastNavigated, true);
         this.view.setStatus('메시지 위치를 찾는 중…');
         const cancelled = () => token !== this.navSerial || context().chat !== chatRef || context().chatId !== chatId;
         try {
             const chatElement = await ensureMessageRendered(initial, index, cancelled, text => this.view.setStatus(text));
-            if (cancelled() || !chatElement) return;
+            if (cancelled() || !chatElement) {
+                this.diagnostics.record('navigation', 'jump_cancelled', { status: 'cancelled', targetIndex: index, durationMs: Date.now() - started });
+                return;
+            }
             const node = getRenderedMessage(chatElement, index);
             if (!scrollToMessage(chatElement, node)) throw new Error('대상 메시지가 화면에서 숨겨져 있어 스크롤할 수 없습니다.');
             this.cursor.set(chatElement, index);
@@ -209,10 +223,14 @@ class NavigatorApp {
             this.highlightTarget(node);
             this.view.setActive(index, true);
             this.view.setStatus(`메시지 #${index}로 이동했습니다.`);
+            this.diagnostics.record('navigation', 'jump_completed', { status: 'ok', targetIndex: index, durationMs: Date.now() - started });
         } catch (error) {
             if (!cancelled()) {
+                this.diagnostics.record('navigation', 'jump_failed', { status: 'error', targetIndex: index, error, durationMs: Date.now() - started });
                 console.warn(PREFIX, error);
                 this.view.setStatus(error.message || '이동에 실패했습니다.', true);
+            } else {
+                this.diagnostics.record('navigation', 'jump_cancelled', { status: 'cancelled', targetIndex: index, durationMs: Date.now() - started });
             }
         } finally {
             if (token === this.navSerial) {
@@ -247,6 +265,8 @@ class NavigatorApp {
         const chatRef = ctx.chat;
         const chatId = ctx.chatId;
         // Don't edit text, swipes, prompt order, or another extension's keys.
+        const started = Date.now();
+        try {
         assignCustomTitle(chatRef, ctx.chatMetadata, index, title);
         // saveMetadata() ultimately saves the whole chat (message ID + metadata).
         // Start the save immediately to minimize switch-chat races.
@@ -255,10 +275,16 @@ class NavigatorApp {
         if (context().chat !== chatRef || context().chatId !== chatId) {
             throw new Error('저장 도중 채팅이 바뀌었습니다. 저장 결과를 확인해 주세요.');
         }
+        this.diagnostics.record('save', 'title_saved', { status: 'ok', targetIndex: index, durationMs: Date.now() - started });
+        } catch (error) {
+            this.diagnostics.record('save', 'title_save_failed', { status: 'error', targetIndex: index, durationMs: Date.now() - started, error });
+            throw error;
+        }
     }
 
     destroy() {
         this.navSerial++;
+        this.diagnostics.record('lifecycle', 'destroyed', { status: 'ok' });
         this.cursor.clear();
         this.clearTargetHighlight();
         if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
@@ -277,7 +303,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.3.0)');
+        console.info(PREFIX, 'loaded (v1.3.1)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
