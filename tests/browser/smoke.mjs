@@ -308,6 +308,55 @@ async function run() {
             assert.equal(await page.locator('.stmn-outline-jumps').isVisible(), false);
         });
 
+        await check('last button jumps to last message start, then bottom; manual scrolling resets', async setup => {
+            const page = await setup(6);
+            await page.evaluate(async () => {
+                window.__stmnView.destroy();
+                const chat = document.getElementById('chat');
+                chat.replaceChildren();
+                for (let i = 0; i < 6; i++) {
+                    const el = document.createElement('div');
+                    el.className = 'mes';
+                    el.setAttribute('mesid', String(i));
+                    el.style.height = (i === 5 ? 900 : 260) + 'px';
+                    el.textContent = 'Message #' + i;
+                    chat.append(el);
+                }
+                const current = window.__stmnContext;
+                current.chatId = 'test-chat';
+                current.chat = Array.from({ length: 6 }, (_, i) => ({ name: 'User', is_user: true, mes: 'text ' + i }));
+                current.extensionSettings = {};
+                current.saveSettingsDebounced = () => {};
+                current.eventTypes = {};
+                current.eventSource = { on() {}, removeListener() {} };
+                globalThis.SillyTavern = { getContext: () => current };
+                await import('/index.js');
+            });
+            const last = page.locator('[data-action="last"]');
+            await last.waitFor({ state: 'visible' });
+            await last.click();
+            await page.waitForFunction(() => document.getElementById('chat').scrollTop > 200);
+            const first = await page.evaluate(() => {
+                const el = document.getElementById('chat');
+                return { top: el.scrollTop, max: el.scrollHeight - el.clientHeight };
+            });
+            assert.ok(first.max - first.top > 100, 'First click must land at message beginning, not bottom');
+            await last.click();
+            const second = await page.evaluate(() => {
+                const el = document.getElementById('chat');
+                return { top: el.scrollTop, max: el.scrollHeight - el.clientHeight };
+            });
+            assert.ok(Math.abs(second.top - second.max) <= 2, 'Second click must reach chat bottom');
+            await page.evaluate(() => document.getElementById('chat').scrollTop = 0);
+            await page.waitForFunction(() => document.getElementById('chat').scrollTop === 0);
+            await last.click();
+            const again = await page.evaluate(() => {
+                const el = document.getElementById('chat');
+                return { top: el.scrollTop, max: el.scrollHeight - el.clientHeight };
+            });
+            assert.ok(again.max - again.top > 100, 'Manual scrolling must clear prior last-button state');
+        });
+
         await check('panel resize saves only on pointer release and clamps to viewport', async setup => {
             const page = await setup(60);
             await page.locator('[data-action="outline"]').click();
