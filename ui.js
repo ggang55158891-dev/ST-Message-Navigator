@@ -1,5 +1,6 @@
 import { automaticTitle, getTitle, isCustomTitle } from './model.js';
 import { ElevatorPanel } from './elevator-ui.js';
+import { installDiagnosticsSettings } from './diagnostics-ui.js';
 import { constrainNavPosition, fromRelativeNavPosition, toRelativeNavPosition } from './position.js';
 import { GROUP_SIZE, MESSAGE_ROW_HEIGHT, buildOutlineRows, filterOutlineEntries, findOutlineRow } from './outline.js';
 
@@ -503,7 +504,7 @@ export class NavigatorView {
     }
 }
 
-export function installSettings(context, settings, onChange) {
+export function installSettings(context, settings, onChange, diagnostics) {
     const host = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
     if (!host || document.getElementById('stmn-settings')) return;
     const container = el('div', 'stmn-settings');
@@ -571,6 +572,7 @@ export function installSettings(context, settings, onChange) {
     side.value = settings.side;
     side.addEventListener('change', () => onChange('side', side.value));
     inner.append(themeLabel, themeSelect, skyLabel, skySelect, buttonToggleLabel, buttonToggleHint, modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
+    installDiagnosticsSettings(inner, settings, onChange, diagnostics);
     heading.append(inner);
     container.append(heading);
     host.append(container);
