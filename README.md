@@ -1,6 +1,8 @@
 # Message Navigator & Outline for SillyTavern
 
-SillyTavern용 메시지 네비게이션 확장 (v1.0.1)
+> **장기 개발 참고 문서:** [개발 지침서·단계별 로드맵](docs/DEVELOPMENT_GUIDE.md) · [개발 도우미 안내](AGENTS.md)
+
+SillyTavern용 채팅·메시지 네비게이션 확장 (현재 manifest 버전: v1.3.0)
 
 ## 설치 (Windows 11 포함)
 
