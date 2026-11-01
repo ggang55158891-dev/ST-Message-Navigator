@@ -1,4 +1,4 @@
-import { automaticTitle, getTitle, isCustomTitle } from './model.js';
+import { DATA_KEY, MESSAGE_KEY, automaticTitle, getTitle, isCustomTitle } from './model.js';
 import { ElevatorPanel } from './elevator-ui.js';
 import { installDiagnosticsSettings } from './diagnostics-ui.js';
 import { constrainNavPosition, fromRelativeNavPosition, toRelativeNavPosition } from './position.js';
@@ -103,6 +103,8 @@ export class NavigatorView {
         this.callbacks = callbacks;
         this.panelOpen = false;
         this.entries = [];
+        // Weak keys allow chats removed from memory to be garbage collected.
+        this.outlineEntryCache = new WeakMap();
         this.filtered = [];
         this.displayRows = [];
         this.groupCollapsed = new Set();
@@ -334,12 +336,31 @@ export class NavigatorView {
         if (!this.panelOpen) return;
         const oldScroll = this.list.scrollTop;
         const context = this.callbacks.context();
-        this.entries = (context.chat || []).map((message, index) => ({
-            message, index,
-            title: getTitle(message, context.chatMetadata),
-            custom: isCustomTitle(message, context.chatMetadata),
-            searchable: `${message?.name || ''} ${getTitle(message, context.chatMetadata)} ${String(message?.mes || '').slice(0, 1500)}`.toLocaleLowerCase(),
-        }));
+        const storedTitles = context.chatMetadata?.[DATA_KEY]?.titles;
+        this.entries = (context.chat || []).map((message, index) => {
+            const rawText = message?.mes;
+            const name = message?.name;
+            const image = message?.extra?.image;
+            const file = message?.extra?.file;
+            const messageId = message?.[MESSAGE_KEY];
+            const titleOverride = typeof messageId === 'string' ? storedTitles?.[messageId] : undefined;
+            // A single edited message invalidates only its own title/search
+            // string. WeakMap entries do not keep old chats alive.
+            let cached = message && typeof message === 'object'
+                ? this.outlineEntryCache.get(message) : null;
+            if (!cached || cached.rawText !== rawText || cached.name !== name ||
+                cached.messageId !== messageId || cached.titleOverride !== titleOverride ||
+                cached.image !== image || cached.file !== file) {
+                const title = getTitle(message, context.chatMetadata);
+                cached = {
+                    rawText, name, messageId, titleOverride, image, file, title,
+                    custom: isCustomTitle(message, context.chatMetadata),
+                    searchable: `${name || ''} ${title} ${String(rawText || '').slice(0, 1500)}`.toLocaleLowerCase(),
+                };
+                if (message && typeof message === 'object') this.outlineEntryCache.set(message, cached);
+            }
+            return { message, index, title: cached.title, custom: cached.custom, searchable: cached.searchable };
+        });
         this.applyFilter({ resetScroll: !keepScroll });
         if (keepScroll) {
             this.list.scrollTop = oldScroll;
