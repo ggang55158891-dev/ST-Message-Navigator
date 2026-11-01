@@ -448,7 +448,7 @@
     width: var(--stmn-panel-width, 400px);
     height: var(--stmn-panel-height, min(84dvh, 850px));
     max-width: calc(100vw - 24px);
-    max-height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 8vh - 8px);
 }
 #stmn-root .stmn-outline-jumps {
     display: flex;
