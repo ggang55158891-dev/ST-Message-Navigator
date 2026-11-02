@@ -7,6 +7,7 @@ import { listAvailableBuildings, enterBuilding } from './buildings.js';
 import { Diagnostics } from './diagnostics.js';
 import { DEFAULT_SETTINGS, SETTINGS_FIELDS, normalizeSettings, diffSettings } from './settings-backup.js';
 import { inspectTitleMetadata } from './metadata-audit.js';
+import { LibraryRepository } from './library-repository.js';
 
 const PREFIX = '[ST Message Navigator]';
 let app;
@@ -30,6 +31,8 @@ function getSettings() {
 class NavigatorApp {
     constructor() {
         this.settings = getSettings();
+        // Library is not read or created at startup; only explicit user actions.
+        this.library = new LibraryRepository(context);
         this.diagnostics = new Diagnostics({ enabled: this.settings.diagnosticsEnabled });
         this.navSerial = 0;
         this.busy = false;
@@ -75,6 +78,10 @@ class NavigatorApp {
                     const ctx = context();
                     return inspectTitleMetadata(ctx.chat, ctx.chatMetadata);
                 },
+            },
+            {
+                readLibrary: () => this.library.read(),
+                importLibrary: incoming => this.library.importAdditively(incoming),
             },
         );
         this.bindChatScroll();
@@ -377,7 +384,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.4.0)');
+        console.info(PREFIX, 'loaded (v1.5.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
