@@ -115,7 +115,10 @@ export function selectLibraryChats(buildings, scope, library, {
             return b.createdAt - a.createdAt || recent(a,b);
         }
         if (sort === 'folders') {
-            return (a.folderName || '~~~~').localeCompare(b.folderName || '~~~~', undefined, {
+            // Explicitly place unfiled chats after named folders. Unicode
+            // collation does not reliably order '~' after Korean text.
+            if (Boolean(a.folderId) !== Boolean(b.folderId)) return a.folderId ? -1 : 1;
+            return a.folderName.localeCompare(b.folderName, undefined, {
                 sensitivity: 'base', numeric: true,
             }) || recent(a,b);
         }
