@@ -520,6 +520,7 @@ async function run() {
             await page.waitForFunction(() => document.querySelectorAll('.stmn-building-card').length === 100);
             assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),0);
             await page.locator('.stmn-library-details summary').first().click();
+            await page.locator('.stmn-library-tag-checkbox').first().waitFor();
             assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),40);
             await page.getByRole('button',{name:/더 보기/}).click();
             assert.equal(await page.locator('.stmn-building-card').count(),200);
