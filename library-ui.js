@@ -38,6 +38,7 @@ export class LibraryLobby {
         this.view = 'all';
         this.folderId = '';
         this.visible = 100;
+        this.openDetails = new Set();
         this.editing = false;
         const host = owner.buildingsPane;
         this.controls = make('div', 'stmn-library-controls');
@@ -247,6 +248,7 @@ export class LibraryLobby {
             wrapper.append(line);
             const details = make('details','stmn-library-details');
             details.append(make('summary','', '관리 · 별명 / 폴더 / 태그'));
+            const buildDetails = () => {
             const body = make('div','stmn-library-detail-body');
             const alias = button('✎ 별명 변경', 'stmn-library-small', () => this.nameEditor(
                 '채팅 별명 변경 (빈 값으로 지우려면 별명 삭제 버튼 사용)',item.alias,
@@ -281,6 +283,22 @@ export class LibraryLobby {
                 body.append(tags);
             }
             details.append(body);
+            };
+            details.addEventListener('toggle', () => {
+                if (!details.isConnected) return;
+                if (details.open) {
+                    this.openDetails.add(item.reference);
+                    if (!details.dataset.built) {
+                        details.dataset.built = '1';
+                        buildDetails();
+                    }
+                } else this.openDetails.delete(item.reference);
+            });
+            if (this.openDetails.has(item.reference)) {
+                details.open = true;
+                details.dataset.built = '1';
+                buildDetails();
+            }
             wrapper.append(details);
             fragment.append(wrapper);
         }
