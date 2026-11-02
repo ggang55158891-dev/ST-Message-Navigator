@@ -379,6 +379,13 @@ async function run() {
             assert.ok(changed.width > original.width);
             assert.ok(changed.height > original.height);
             await page.setViewportSize({ width: 375, height: 667 });
+            // Let the viewport resize listener and layout settle before
+            // checking the panel geometry.
+            await page.waitForFunction(() => {
+                const rect = document.querySelector('.stmn-outline').getBoundingClientRect();
+                return rect.x >= 0 && rect.x + rect.width <= innerWidth + 1 &&
+                    rect.y + rect.height <= innerHeight + 1;
+            }, { timeout: 2500 });
             const clamped = await page.locator('.stmn-outline').boundingBox();
             assert.ok(clamped.x >= 0 && clamped.x + clamped.width <= 375);
             assert.ok(clamped.y + clamped.height <= 667);
