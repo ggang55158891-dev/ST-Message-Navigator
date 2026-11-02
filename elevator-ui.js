@@ -1,5 +1,6 @@
 import { buildingScope, cleanChatId } from './building-data.js';
 import { LibraryLobby } from './library-ui.js';
+import { emptyLibrary } from './library-data.js';
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -151,7 +152,7 @@ export class ElevatorPanel {
         try {
             const result = await this.callbacks.listBuildings(context);
             if (id !== this.requestId || requestedScope !== buildingScope(this.callbacks.context())) return;
-            const library = this.callbacks.readLibrary();
+            const library = this.callbacks.readLibrary?.() || emptyLibrary();
             this.buildings = result.buildings || [];
             this.scope = result.scope;
             this.libraryUI.setData(library);
