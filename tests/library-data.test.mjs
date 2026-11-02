@@ -113,6 +113,17 @@ test('additive import includes new tags, folders, and chat without overwriting e
     assert.equal(JSON.stringify(previous), before);
 });
 
+test('equal records with reordered JSON keys do not cause false conflicts', () => {
+    const old = filled();
+    const incoming = filled();
+    const key = chatReference('character:b.png', 'same-chat');
+    const original = incoming.records[key];
+    incoming.records[key] = Object.fromEntries(Object.entries(original).reverse());
+    const merged = mergeLibrary(old, incoming);
+    assert.equal(merged.records[key].alias, '안개 속의 건물');
+    assert.equal(Object.keys(merged.records).length, 1);
+});
+
 test('conflicting imported alias and catalog IDs are rejected; existing data unchanged', () => {
     const previous = filled();
     const incoming = filled();
