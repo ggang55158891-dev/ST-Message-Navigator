@@ -384,6 +384,50 @@ async function run() {
             assert.ok(clamped.y + clamped.height <= 667);
         });
 
+        await check('C library backup does not write until confirmed and keeps other extension data', async setup => {
+            const page = await setup(23);
+            await page.evaluate(async () => {
+                const { installLibraryBackupUI } = await import('/library-backup-ui.js');
+                const { LibraryRepository } = await import('/library-repository.js');
+                const { emptyLibrary, emptyRecord, currentChatReference, createLibraryBackup } =
+                    await import('/library-data.js');
+                const context = window.__stmnContext;
+                context.extensionSettings = { unrelated_extension: { keep: 123 } };
+                window.__librarySaves = 0;
+                context.saveSettingsDebounced = () => { window.__librarySaves++; };
+                const storage = new LibraryRepository(() => context);
+                const data = emptyLibrary();
+                data.records[currentChatReference(context)] = { ...emptyRecord(), alias: '테스트 건물' };
+                window.__libraryBackupText = createLibraryBackup(data, { version: '1.5.0' });
+                installLibraryBackupUI(document.getElementById('extensions_settings2'), {
+                    readLibrary: () => storage.read(),
+                    importLibrary: backup => storage.importAdditively(backup),
+                });
+            });
+            await page.locator('.stmn-library-settings > summary').click();
+            await page.getByRole('button', { name: '관리 데이터 상태 확인' }).click();
+            assert.match(await page.locator('.stmn-library-preview').innerText(), /채팅: 0/);
+            const input = page.locator('.stmn-library-settings input[type="file"]');
+            await input.setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{invalid') });
+            assert.equal(await page.getByRole('button', { name: '관리 데이터 병합 복원' }).isDisabled(), true);
+            const valid = await page.evaluate(() => window.__libraryBackupText);
+            await input.setInputFiles({ name: 'library.json', mimeType: 'application/json', buffer: Buffer.from(valid) });
+            await page.locator('.stmn-library-consent input').waitFor({ state: 'visible' });
+            assert.equal(await page.evaluate(() => window.__librarySaves), 0);
+            assert.equal(await page.getByRole('button', { name: '관리 데이터 병합 복원' }).isDisabled(), true);
+            await page.locator('.stmn-library-consent input').check();
+            await page.getByRole('button', { name: '관리 데이터 병합 복원' }).click();
+            assert.deepEqual(await page.evaluate(() => {
+                const ext = window.__stmnContext.extensionSettings;
+                return {
+                    saves: window.__librarySaves,
+                    untouched: ext.unrelated_extension.keep,
+                    chats: Object.keys(ext.stmn_library_v1.records).length,
+                    alias: Object.values(ext.stmn_library_v1.records)[0].alias,
+                };
+            }), { saves: 1, untouched: 123, chats: 1, alias: '테스트 건물' });
+        });
+
         await check('10000 messages keep DOM list virtualized', async setup => {
             const page = await setup(10000);
             await page.locator('[data-action="outline"]').click();
