@@ -73,9 +73,11 @@ export class LibraryLobby {
             const row = this.data.folders.find(x => x.id === this.folderId);
             if (!row) return;
             if (!window.confirm('"' + row.name + '" 폴더만 삭제할까요?\n채팅 파일은 삭제되지 않고 미분류로 이동합니다.')) return;
-            this.mutate({ kind: 'folder', type: 'delete', id: row.id });
-            this.folderId = '';
-            this.draw();
+            try {
+                this.mutate({ kind: 'folder', type: 'delete', id: row.id });
+                this.folderId = '';
+                this.draw();
+            } catch(error) { this.error.textContent = error?.message || '폴더 삭제에 실패했습니다.'; }
         });
         folderToolbar.append(this.folderNew, this.folderRename, this.folderDelete);
 
@@ -83,6 +85,9 @@ export class LibraryLobby {
         tagToolbar.append(make('span', '', '태그'));
         this.tagSelect = make('select', 'stmn-library-tag-filter');
         this.tagSelect.setAttribute('aria-label', '관리할 태그');
+        this.tagSelect.addEventListener('change', () => {
+            this.tagRename.disabled = this.tagDelete.disabled = !this.tagSelect.value;
+        });
         this.tagNew = button('+ 추가', 'stmn-library-small', () => this.nameEditor('태그 만들기', '', value =>
             this.mutate({ kind: 'tag', type: 'create', id: newId('t_'), name: value })));
         this.tagRename = button('이름 변경', 'stmn-library-small', () => {
@@ -94,8 +99,10 @@ export class LibraryLobby {
             const row = this.data.tags.find(x => x.id === this.tagSelect.value);
             if (!row) return;
             if (!window.confirm('"' + row.name + '" 태그를 모든 채팅에서 제거할까요?\n채팅 파일은 삭제되지 않습니다.')) return;
-            this.mutate({ kind: 'tag', type: 'delete', id: row.id });
-            this.draw();
+            try {
+                this.mutate({ kind: 'tag', type: 'delete', id: row.id });
+                this.draw();
+            } catch(error) { this.error.textContent = error?.message || '태그 삭제에 실패했습니다.'; }
         });
         tagToolbar.append(this.tagSelect, this.tagNew, this.tagRename, this.tagDelete);
         this.editor = make('form', 'stmn-library-editor');
@@ -124,7 +131,9 @@ export class LibraryLobby {
         });
         this.error = make('p', 'stmn-library-error');
         this.error.setAttribute('role', 'status');
-        this.controls.append(selectorRow, folderToolbar, tagToolbar, this.editor, this.error);
+        const manage = make('details','stmn-library-manage');
+        manage.append(make('summary','','폴더 · 태그 만들기 / 관리'),folderToolbar,tagToolbar);
+        this.controls.append(selectorRow, manage, this.editor, this.error);
         host.insertBefore(this.controls, owner.buildingList);
     }
 
