@@ -500,6 +500,31 @@ async function run() {
             assert.equal(saved.saves,6);
         });
 
+        await check('D library pages 350 chats and lazily creates tag controls', async setup => {
+            const page = await setup(16);
+            await page.evaluate(async () => {
+                const { emptyLibrary } = await import('/library-data.js');
+                const lib = emptyLibrary();
+                lib.tags = Array.from({ length:40 },(_,i)=>({id:'t'+i,name:'태그 '+i}));
+                const callbacks = window.__stmnView.callbacks;
+                callbacks.readLibrary = () => lib;
+                callbacks.listBuildings = async () => ({
+                    scope:'character:none', title:'Character',
+                    buildings:Array.from({length:350},(_,i)=>({
+                        id:'chat-'+i, name:'Chat '+i, lastActivity:350-i, count:4, preview:'',
+                    })),
+                });
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.waitForFunction(() => document.querySelectorAll('.stmn-building-card').length === 100);
+            assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),0);
+            await page.locator('.stmn-library-details summary').first().click();
+            assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),40);
+            await page.getByRole('button',{name:/더 보기/}).click();
+            assert.equal(await page.locator('.stmn-building-card').count(),200);
+        });
+
         await check('10000 messages keep DOM list virtualized', async setup => {
             const page = await setup(10000);
             await page.locator('[data-action="outline"]').click();
