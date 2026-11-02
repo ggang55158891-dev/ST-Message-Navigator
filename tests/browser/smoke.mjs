@@ -468,21 +468,28 @@ async function run() {
             await page.locator('.stmn-library-view').selectOption('folders');
             await page.locator('.stmn-library-folder-filter').selectOption({label:'작업 폴더'});
             assert.equal(await page.locator('.stmn-building-card').count(),1);
+            await page.locator('.stmn-library-toolbar').nth(1).getByRole('button',{name:'+ 추가'}).click();
+            await page.locator('.stmn-library-editor input').fill('판타지');
+            await page.locator('.stmn-library-editor button[type="submit"]').click();
+            await page.locator('.stmn-library-details summary').click();
+            await page.locator('.stmn-library-tag-checkboxes').getByLabel('판타지').check();
             assert.match(await page.locator('.stmn-building-card-title').innerText(), /새 별명 B/);
             const saved = await page.evaluate(() => {
                 const settings = window.__stmnContext.extensionSettings;
                 const row = Object.values(settings.stmn_library_v1.records)[0];
                 return { alias:row.alias, favorite:row.favorite, folderId:row.folderId,
                     folderName:settings.stmn_library_v1.folders[0].name,
+                    tagNames:row.tagIds.map(id=>settings.stmn_library_v1.tags.find(x=>x.id===id)?.name),
                     other:settings.other_extension.keep, saves:window.__librarySaves,
                     originalChatId:window.__stmnContext.chatId };
             });
             assert.equal(saved.alias,'새 별명 B');
             assert.equal(saved.favorite,true);
             assert.equal(saved.folderName,'작업 폴더');
+            assert.deepEqual(saved.tagNames,['판타지']);
             assert.equal(saved.other,'yes');
             assert.equal(saved.originalChatId,'chat-a');
-            assert.equal(saved.saves,4);
+            assert.equal(saved.saves,6);
         });
 
         await check('10000 messages keep DOM list virtualized', async setup => {
