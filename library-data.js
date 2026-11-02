@@ -4,6 +4,8 @@ import { buildingScope, cleanChatId } from './building-data.js';
 export const LIBRARY_KEY = 'stmn_library_v1';
 export const LIBRARY_SCHEMA = 1;
 export const MAX_LIBRARY_BYTES = 256 * 1024;
+// Human-readable backup formatting can be larger than the compact store.
+export const MAX_LIBRARY_BACKUP_BYTES = MAX_LIBRARY_BYTES * 3;
 export const MAX_LIBRARY_RECORDS = 2000;
 export const MAX_LIBRARY_FOLDERS = 200;
 export const MAX_LIBRARY_TAGS = 300;
