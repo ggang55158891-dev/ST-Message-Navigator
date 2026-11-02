@@ -158,7 +158,7 @@ export function createLibraryBackup(library, { now = new Date(), version = 'unkn
 }
 
 export function parseLibraryBackup(text) {
-    if (typeof text !== 'string' || new TextEncoder().encode(text).length > MAX_LIBRARY_BYTES + 65536) {
+    if (typeof text !== 'string' || new TextEncoder().encode(text).length > MAX_LIBRARY_BACKUP_BYTES) {
         throw new Error('관리 데이터 백업 파일이 너무 큽니다.');
     }
     let root;
