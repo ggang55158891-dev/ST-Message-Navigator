@@ -471,7 +471,8 @@ async function run() {
             await page.locator('.stmn-library-toolbar').nth(1).getByRole('button',{name:'+ 추가'}).click();
             await page.locator('.stmn-library-editor input').fill('판타지');
             await page.locator('.stmn-library-editor button[type="submit"]').click();
-            await page.locator('.stmn-library-details summary').click();
+            const detail = page.locator('.stmn-library-details');
+            if (!(await detail.evaluate(el => el.open))) await detail.locator('summary').click();
             await page.locator('.stmn-library-tag-checkboxes').getByLabel('판타지').check();
             assert.match(await page.locator('.stmn-building-card-title').innerText(), /새 별명 B/);
             const saved = await page.evaluate(() => {
