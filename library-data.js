@@ -191,7 +191,11 @@ export function mergeLibrary(existing, incoming) {
     }
     const records = Object.assign(Object.create(null), old.records);
     for (const [key, record] of Object.entries(next.records)) {
-        if (own(records, key) && JSON.stringify(records[key]) !== JSON.stringify(record)) {
+        // JSON object member order is not meaningful. Preserve existing
+        // records when their schema fields are equal, even if a backup was
+        // reserialized with a different property order.
+        if (own(records, key) && Object.keys(emptyRecord()).some(field =>
+            JSON.stringify(records[key][field]) !== JSON.stringify(record[field]))) {
             throw new Error('채팅 관리 정보 충돌: 기존 값을 덮어쓰지 않습니다.');
         }
         records[key] = record;
