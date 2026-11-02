@@ -1,4 +1,5 @@
 /** SillyTavern adapter: library metadata only, lazily accessed on user action. */
+import { changeLibrary } from './library-operations.js';
 import {
     LIBRARY_KEY, validateLibrary, mergeLibrary, librarySummary,
 } from './library-data.js';
@@ -25,6 +26,30 @@ export class LibraryRepository {
     inspect() {
         // Raises an error for malformed data instead of overwriting it.
         return librarySummary(this.read());
+    }
+
+    /**
+     * Commit a single requested change. Parse and validate before write;
+     * never overwrite an invalid/future schema or unrelated extension keys.
+     */
+    update(action) {
+        const ctx = this.settingsRoot();
+        if (typeof ctx.saveSettingsDebounced !== 'function') {
+            throw new Error('SillyTavern 설정 저장 함수를 사용할 수 없습니다.');
+        }
+        const settings = ctx.extensionSettings;
+        const previous = settings[LIBRARY_KEY];
+        const next = changeLibrary(previous, action);
+        if (JSON.stringify(validateLibrary(previous)) === JSON.stringify(next)) return this.read();
+        settings[LIBRARY_KEY] = next;
+        try {
+            ctx.saveSettingsDebounced();
+        } catch (error) {
+            if (previous === undefined) delete settings[LIBRARY_KEY];
+            else settings[LIBRARY_KEY] = previous;
+            throw error;
+        }
+        return next;
     }
 
     /**

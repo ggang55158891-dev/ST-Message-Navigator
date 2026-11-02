@@ -4,6 +4,7 @@ import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
 import { validPanelSize } from './panel-size.js';
 import { listAvailableBuildings, enterBuilding } from './buildings.js';
+import { buildingScope } from './building-data.js';
 import { Diagnostics } from './diagnostics.js';
 import { DEFAULT_SETTINGS, SETTINGS_FIELDS, normalizeSettings, diffSettings } from './settings-backup.js';
 import { inspectTitleMetadata } from './metadata-audit.js';
@@ -63,6 +64,18 @@ class NavigatorApp {
             savePanelSize: size => this.changeSetting('panelSize', size),
             listBuildings: listAvailableBuildings,
             enterBuilding,
+            readLibrary: () => this.library.read(),
+            currentLibraryScope: () => buildingScope(context()),
+            changeLibrary: action => {
+                try {
+                    const result = this.library.update(action);
+                    this.diagnostics.record('save', 'library_updated', { status: 'ok' });
+                    return result;
+                } catch (error) {
+                    this.diagnostics.record('save', 'library_update_failed', { status: 'error', error });
+                    throw error;
+                }
+            },
             getTheme: () => this.settings.elevatorTheme,
             getSkyMode: () => this.settings.elevatorSky,
             logDiagnostic: (category, code, details) => this.diagnostics.record(category, code, details),
@@ -384,7 +397,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.5.0)');
+        console.info(PREFIX, 'loaded (v1.6.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }

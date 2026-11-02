@@ -379,6 +379,13 @@ async function run() {
             assert.ok(changed.width > original.width);
             assert.ok(changed.height > original.height);
             await page.setViewportSize({ width: 375, height: 667 });
+            // Let the viewport resize listener and layout settle before
+            // checking the panel geometry.
+            await page.waitForFunction(() => {
+                const rect = document.querySelector('.stmn-outline').getBoundingClientRect();
+                return rect.x >= 0 && rect.x + rect.width <= innerWidth + 1 &&
+                    rect.y + rect.height <= innerHeight + 1;
+            }, { timeout: 2500 });
             const clamped = await page.locator('.stmn-outline').boundingBox();
             assert.ok(clamped.x >= 0 && clamped.x + clamped.width <= 375);
             assert.ok(clamped.y + clamped.height <= 667);
@@ -426,6 +433,97 @@ async function run() {
                     alias: Object.values(ext.stmn_library_v1.records)[0].alias,
                 };
             }), { saves: 1, untouched: 123, chats: 1, alias: '테스트 건물' });
+        });
+
+        await check('D library aliases, favorites, folder assignment and persistence', async setup => {
+            const page = await setup(23);
+            await page.evaluate(async () => {
+                const { LibraryRepository } = await import('/library-repository.js');
+                const { buildingScope } = await import('/building-data.js');
+                const ctx = window.__stmnContext;
+                ctx.extensionSettings = { other_extension: { keep: 'yes' } };
+                window.__librarySaves = 0;
+                ctx.saveSettingsDebounced = () => { window.__librarySaves++; };
+                const repo = new LibraryRepository(() => ctx);
+                const callbacks = window.__stmnView.callbacks;
+                callbacks.readLibrary = () => repo.read();
+                callbacks.changeLibrary = action => repo.update(action);
+                callbacks.currentLibraryScope = () => buildingScope(ctx);
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab', { name: '건물 로비' }).click();
+            await page.locator('.stmn-building-card').first().waitFor();
+            assert.equal(await page.locator('.stmn-building-card').count(), 2);
+            await page.getByRole('button', { name: '건물 B 즐겨찾기 추가' }).click();
+            assert.equal(await page.evaluate(() => window.__librarySaves), 1);
+            await page.locator('.stmn-library-view').selectOption('favorites');
+            assert.equal(await page.locator('.stmn-building-card').count(), 1);
+            const card = page.locator('.stmn-library-card');
+            await card.locator('.stmn-library-details summary').click();
+            await card.getByRole('button', { name: '✎ 별명 변경' }).click();
+            await page.locator('.stmn-library-editor input').fill('새 별명 B');
+            await page.locator('.stmn-library-editor button[type="submit"]').click();
+            assert.equal(await page.locator('.stmn-building-card-title').innerText(), '새 별명 B');
+            assert.equal(await page.evaluate(() => window.__stmnContext.chatId), 'chat-a');
+
+            // Folder catalog is independent from SillyTavern chat paths.
+            await page.locator('.stmn-library-manage > summary').click();
+            await page.locator('.stmn-library-toolbar').first().getByRole('button',{name:'+ 추가'}).click();
+            await page.locator('.stmn-library-editor input').fill('작업 폴더');
+            await page.locator('.stmn-library-editor button[type="submit"]').click();
+            await page.locator('.stmn-library-card-folder').selectOption({label:'작업 폴더'});
+            await page.locator('.stmn-library-view').selectOption('folders');
+            await page.locator('.stmn-library-folder-filter').selectOption({label:'작업 폴더'});
+            assert.equal(await page.locator('.stmn-building-card').count(),1);
+            await page.locator('.stmn-library-toolbar').nth(1).getByRole('button',{name:'+ 추가'}).click();
+            await page.locator('.stmn-library-editor input').fill('판타지');
+            await page.locator('.stmn-library-editor button[type="submit"]').click();
+            const detail = page.locator('.stmn-library-details');
+            if (!(await detail.evaluate(el => el.open))) await detail.locator('summary').click();
+            await page.locator('.stmn-library-tag-checkboxes').getByLabel('판타지').check();
+            assert.match(await page.locator('.stmn-building-card-title').innerText(), /새 별명 B/);
+            const saved = await page.evaluate(() => {
+                const settings = window.__stmnContext.extensionSettings;
+                const row = Object.values(settings.stmn_library_v1.records)[0];
+                return { alias:row.alias, favorite:row.favorite, folderId:row.folderId,
+                    folderName:settings.stmn_library_v1.folders[0].name,
+                    tagNames:row.tagIds.map(id=>settings.stmn_library_v1.tags.find(x=>x.id===id)?.name),
+                    other:settings.other_extension.keep, saves:window.__librarySaves,
+                    originalChatId:window.__stmnContext.chatId };
+            });
+            assert.equal(saved.alias,'새 별명 B');
+            assert.equal(saved.favorite,true);
+            assert.equal(saved.folderName,'작업 폴더');
+            assert.deepEqual(saved.tagNames,['판타지']);
+            assert.equal(saved.other,'yes');
+            assert.equal(saved.originalChatId,'chat-a');
+            assert.equal(saved.saves,6);
+        });
+
+        await check('D library pages 350 chats and lazily creates tag controls', async setup => {
+            const page = await setup(16);
+            await page.evaluate(async () => {
+                const { emptyLibrary } = await import('/library-data.js');
+                const lib = emptyLibrary();
+                lib.tags = Array.from({ length:40 },(_,i)=>({id:'t'+i,name:'태그 '+i}));
+                const callbacks = window.__stmnView.callbacks;
+                callbacks.readLibrary = () => lib;
+                callbacks.listBuildings = async () => ({
+                    scope:'character:none', title:'Character',
+                    buildings:Array.from({length:350},(_,i)=>({
+                        id:'chat-'+i, name:'Chat '+i, lastActivity:350-i, count:4, preview:'',
+                    })),
+                });
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.waitForFunction(() => document.querySelectorAll('.stmn-building-card').length === 100);
+            assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),0);
+            await page.locator('.stmn-library-details summary').first().click();
+            await page.locator('.stmn-library-tag-checkbox').first().waitFor();
+            assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),40);
+            await page.getByRole('button',{name:/더 보기/}).click();
+            assert.equal(await page.locator('.stmn-building-card').count(),200);
         });
 
         await check('10000 messages keep DOM list virtualized', async setup => {
