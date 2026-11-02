@@ -1,6 +1,6 @@
 /** Optional library foundation controls; work is done only on button clicks. */
 import {
-    MAX_LIBRARY_BYTES, createLibraryBackup, parseLibraryBackup,
+    MAX_LIBRARY_BACKUP_BYTES, createLibraryBackup, parseLibraryBackup,
     librarySummary, mergeLibrary,
 } from './library-data.js';
 
