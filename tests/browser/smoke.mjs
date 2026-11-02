@@ -428,6 +428,63 @@ async function run() {
             }), { saves: 1, untouched: 123, chats: 1, alias: '테스트 건물' });
         });
 
+        await check('D library aliases, favorites, folder assignment and persistence', async setup => {
+            const page = await setup(23);
+            await page.evaluate(async () => {
+                const { LibraryRepository } = await import('/library-repository.js');
+                const { buildingScope } = await import('/building-data.js');
+                const ctx = window.__stmnContext;
+                ctx.extensionSettings = { other_extension: { keep: 'yes' } };
+                window.__librarySaves = 0;
+                ctx.saveSettingsDebounced = () => { window.__librarySaves++; };
+                const repo = new LibraryRepository(() => ctx);
+                const callbacks = window.__stmnView.callbacks;
+                callbacks.readLibrary = () => repo.read();
+                callbacks.changeLibrary = action => repo.update(action);
+                callbacks.currentLibraryScope = () => buildingScope(ctx);
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab', { name: '건물 로비' }).click();
+            await page.locator('.stmn-building-card').first().waitFor();
+            assert.equal(await page.locator('.stmn-building-card').count(), 2);
+            await page.getByRole('button', { name: '건물 B 즐겨찾기 추가' }).click();
+            assert.equal(await page.evaluate(() => window.__librarySaves), 1);
+            await page.locator('.stmn-library-view').selectOption('favorites');
+            assert.equal(await page.locator('.stmn-building-card').count(), 1);
+            const card = page.locator('.stmn-library-card');
+            await card.locator('.stmn-library-details summary').click();
+            await card.getByRole('button', { name: '✎ 별명 변경' }).click();
+            await page.locator('.stmn-library-editor input').fill('새 별명 B');
+            await page.locator('.stmn-library-editor button[type="submit"]').click();
+            assert.equal(await page.locator('.stmn-building-card-title').innerText(), '새 별명 B');
+            assert.equal(await page.evaluate(() => window.__stmnContext.chatId), 'chat-a');
+
+            // Folder catalog is independent from SillyTavern chat paths.
+            await page.locator('.stmn-library-manage > summary').click();
+            await page.locator('.stmn-library-toolbar').first().getByRole('button',{name:'+ 추가'}).click();
+            await page.locator('.stmn-library-editor input').fill('작업 폴더');
+            await page.locator('.stmn-library-editor button[type="submit"]').click();
+            await page.locator('.stmn-library-card-folder').selectOption({label:'작업 폴더'});
+            await page.locator('.stmn-library-view').selectOption('folders');
+            await page.locator('.stmn-library-folder-filter').selectOption({label:'작업 폴더'});
+            assert.equal(await page.locator('.stmn-building-card').count(),1);
+            assert.match(await page.locator('.stmn-building-card-title').innerText(), /새 별명 B/);
+            const saved = await page.evaluate(() => {
+                const settings = window.__stmnContext.extensionSettings;
+                const row = Object.values(settings.stmn_library_v1.records)[0];
+                return { alias:row.alias, favorite:row.favorite, folderId:row.folderId,
+                    folderName:settings.stmn_library_v1.folders[0].name,
+                    other:settings.other_extension.keep, saves:window.__librarySaves,
+                    originalChatId:window.__stmnContext.chatId };
+            });
+            assert.equal(saved.alias,'새 별명 B');
+            assert.equal(saved.favorite,true);
+            assert.equal(saved.folderName,'작업 폴더');
+            assert.equal(saved.other,'yes');
+            assert.equal(saved.originalChatId,'chat-a');
+            assert.equal(saved.saves,4);
+        });
+
         await check('10000 messages keep DOM list virtualized', async setup => {
             const page = await setup(10000);
             await page.locator('[data-action="outline"]').click();
