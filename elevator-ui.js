@@ -1,4 +1,5 @@
-import { buildingScope, cleanChatId, findBuildings } from './building-data.js';
+import { buildingScope, cleanChatId } from './building-data.js';
+import { LibraryLobby } from './library-ui.js';
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -63,12 +64,12 @@ export class ElevatorPanel {
         const controls = element('div', 'stmn-building-controls');
         this.search = element('input', 'stmn-building-search');
         this.search.type = 'search';
-        this.search.placeholder = '건물(채팅) 이름 검색';
+        this.search.placeholder = '채팅 이름·별명·폴더·태그 검색';
         this.search.setAttribute('aria-label', '건물 검색');
         this.search.addEventListener('input', () => this.renderBuildings());
         this.sort = element('select', 'stmn-building-sort');
         this.sort.setAttribute('aria-label', '건물 정렬');
-        for (const [value, label] of [['recent','최근 활동'],['name','이름순']]) {
+        for (const [value, label] of [['recent','최근 활동'],['created','생성일'],['folders','폴더별 · 최근순'],['name','이름순']]) {
             const option = element('option', '', label);
             option.value = value;
             this.sort.append(option);
@@ -83,6 +84,7 @@ export class ElevatorPanel {
         this.buildingList.setAttribute('role', 'list');
         this.hint = element('div', 'stmn-building-hint', '건물은 채팅 파일 하나를 뜻해요. 각 건물 안의 메시지가 층이 됩니다.');
         this.buildingsPane.append(intro, controls, toolbar, this.buildingList, this.hint);
+        this.libraryUI = new LibraryLobby(this);
 
         header.after(this.dashboard, this.tabs);
         view.footer.before(this.buildingsPane);
@@ -104,7 +106,7 @@ export class ElevatorPanel {
             ? (context.groups || []).find(group => String(group.id) === String(context.groupId))
             : context.characters?.[context.characterId];
         const name = cleanChatId(context.chatId);
-        this.buildingName.textContent = name || selected?.name || '선택된 채팅 없음';
+        this.buildingName.textContent = this.libraryUI?.getAlias(buildingScope(context),name) || name || selected?.name || '선택된 채팅 없음';
         this.buildingName.title = name;
         this.floor.textContent = Number.isInteger(index) && index >= 0 ? '#' + index : '#—';
         this.floor.title = '현재 메시지 번호';
@@ -149,12 +151,15 @@ export class ElevatorPanel {
         try {
             const result = await this.callbacks.listBuildings(context);
             if (id !== this.requestId || requestedScope !== buildingScope(this.callbacks.context())) return;
+            const library = this.callbacks.readLibrary();
             this.buildings = result.buildings || [];
             this.scope = result.scope;
+            this.libraryUI.setData(library);
             this.scopeLabel.textContent = result.title || '현재 캐릭터 또는 그룹';
             this.lastLoaded = Date.now();
             this.callbacks.logDiagnostic?.('chat-switch', 'list_completed', { status: 'ok', count: this.buildings.length, durationMs: Date.now() - started });
             this.renderBuildings();
+            this.updateFloor(this.view.currentIndex);
         } catch (error) {
             if (id !== this.requestId) return;
             this.callbacks.logDiagnostic?.('chat-switch', 'list_failed', { status: 'error', error, durationMs: Date.now() - started });
@@ -167,41 +172,7 @@ export class ElevatorPanel {
     }
 
     renderBuildings() {
-        const selected = cleanChatId(this.callbacks.context().chatId);
-        const filtered = findBuildings(this.buildings, this.search.value, this.sort.value);
-        this.buildingsCount.textContent = filtered.length.toLocaleString() + '개 건물';
-        this.buildingList.replaceChildren();
-        if (!filtered.length) {
-            this.buildingList.append(element('p','stmn-building-empty',
-                this.buildings.length ? '검색에 맞는 건물이 없어요.' : '이 캐릭터에 저장된 채팅이 없어요.'));
-            return;
-        }
-        const maxVisible = 200;
-        const fragment = document.createDocumentFragment();
-        for (const item of filtered.slice(0, maxVisible)) {
-            const current = selected === item.id;
-            const card = button('', 'stmn-building-card' + (current ? ' stmn-building-current' : ''), () => void this.enter(item));
-            card.setAttribute('role', 'listitem');
-            card.setAttribute('aria-label', item.name + (current ? ' · 현재 건물' : ' · 건물로 이동'));
-            card.disabled = this.busy;
-            const facade = element('span','stmn-building-facade');
-            facade.setAttribute('aria-hidden', 'true');
-            const body = element('span','stmn-building-card-body');
-            body.append(element('strong','stmn-building-card-title',item.name));
-            const meta = [current ? '현재 건물' : '채팅',
-                Number.isInteger(item.count) ? item.count + '개 메시지' : null,
-                item.lastActivity ? new Date(item.lastActivity).toLocaleDateString() : null,
-            ].filter(Boolean).join(' · ');
-            body.append(element('small','stmn-building-card-meta',meta));
-            if (item.preview) body.append(element('span','stmn-building-card-preview',item.preview));
-            card.append(facade, body, element('span','stmn-building-enter',current ? '●' : '›'));
-            fragment.append(card);
-        }
-        this.buildingList.append(fragment);
-        if (filtered.length > maxVisible) {
-            this.buildingList.append(element('p', 'stmn-building-empty',
-                '처음 ' + maxVisible + '개만 표시 중 · 검색창에서 원하는 건물을 찾아보세요.'));
-        }
+        this.libraryUI.draw();
     }
 
     async enter(item) {
@@ -253,5 +224,6 @@ export class ElevatorPanel {
 
     destroy() {
         ++this.requestId;
+        this.libraryUI?.destroy();
     }
 }
