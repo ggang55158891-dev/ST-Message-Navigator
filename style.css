@@ -556,7 +556,7 @@
     flex: none; align-self: stretch; min-width: 34px; padding: 4px;
     border-radius: 9px; border: 1px solid var(--stmn-border);
     color: var(--stmn-accent); background: color-mix(in srgb, var(--stmn-bg), transparent 16%);
-    font: 600 22px inherit; cursor: pointer;
+    font-family: inherit; font-size: 22px; font-weight: 600; cursor: pointer;
 }
 #stmn-root .stmn-library-details { padding: 3px 7px; border: 1px solid var(--stmn-border); border-radius: 7px; }
 #stmn-root .stmn-library-details summary { cursor: pointer; font-size: 10px; opacity: .85; user-select: none; }
