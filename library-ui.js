@@ -138,9 +138,18 @@ export class LibraryLobby {
         host.insertBefore(this.controls, owner.buildingList);
     }
 
-    setData(data) {
+    setData(data, scope) {
+        if (this.loadedScope !== scope) {
+            this.loadedScope = scope;
+            this.visible = 100;
+            this.openDetails.clear();
+            this.closeEditor();
+            this.view = 'all';
+            this.viewSelect.value = 'all';
+            this.folderId = '';
+        }
         this.data = data;
-        this.draw();
+        // Parent refresh renders once after it has updated building + scope.
     }
 
     refreshSelectors() {
