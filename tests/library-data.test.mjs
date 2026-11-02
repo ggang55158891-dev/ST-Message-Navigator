@@ -136,7 +136,11 @@ test('duplicate catalog IDs and malformed references are not silently repaired',
 
 test('prototype keys do not mutate the Object prototype', () => {
     const json = JSON.parse(createLibraryBackup(emptyLibrary()));
-    json.library.records['__proto__'] = { polluted: true };
+    // Direct assignment to __proto__ changes prototype rather than creating
+    // an own JSON field; simulate a real crafted backup property instead.
+    Object.defineProperty(json.library.records, '__proto__', {
+        value: { polluted: true }, enumerable: true, writable: true, configurable: true,
+    });
     assert.throws(() => parseLibraryBackup(JSON.stringify(json)), /식별자/);
     assert.equal(({}).polluted, undefined);
 });
