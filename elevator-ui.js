@@ -155,7 +155,7 @@ export class ElevatorPanel {
             const library = this.callbacks.readLibrary?.() || emptyLibrary();
             this.buildings = result.buildings || [];
             this.scope = result.scope;
-            this.libraryUI.setData(library);
+            this.libraryUI.setData(library, result.scope);
             this.scopeLabel.textContent = result.title || '현재 캐릭터 또는 그룹';
             this.lastLoaded = Date.now();
             this.callbacks.logDiagnostic?.('chat-switch', 'list_completed', { status: 'ok', count: this.buildings.length, durationMs: Date.now() - started });
@@ -163,6 +163,8 @@ export class ElevatorPanel {
             this.updateFloor(this.view.currentIndex);
         } catch (error) {
             if (id !== this.requestId) return;
+            this.libraryUI.data = null;
+            this.libraryUI.controls.hidden = true;
             this.callbacks.logDiagnostic?.('chat-switch', 'list_failed', { status: 'error', error, durationMs: Date.now() - started });
             this.buildingList.replaceChildren(element('p', 'stmn-building-empty',
                 '건물 목록을 불러오지 못했어요: ' + (error?.message || '알 수 없는 오류')));
