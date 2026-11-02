@@ -84,7 +84,7 @@ export function installLibraryBackupUI(host, { readLibrary, importLibrary } = {}
         preview.hidden = true;
         const file = input.files?.[0];
         if (!file) return;
-        if (file.size > MAX_LIBRARY_BYTES + 65536) {
+        if (file.size > MAX_LIBRARY_BACKUP_BYTES) {
             feedback.textContent = '백업 파일이 허용 크기를 초과했습니다.';
             return;
         }
