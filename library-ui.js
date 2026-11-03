@@ -2,6 +2,7 @@
 import { cleanChatId } from './building-data.js';
 import { chatReference, emptyLibrary } from './library-data.js';
 import { selectLibraryChats } from './library-operations.js';
+import { buildQuietFolderSections, FOLDER_DRAWER_PAGE_SIZE } from './quiet-folders.js';
 
 const make = (tag, className = '', text) => {
     const el = document.createElement(tag);
@@ -40,6 +41,9 @@ export class LibraryLobby {
         this.visible = 100;
         this.openDetails = new Set();
         this.editing = false;
+        this.drawerOpen = false;
+        this.expandedFolderKeys = new Set();
+        this.folderPageLimits = new Map();
         const host = owner.buildingsPane;
         this.controls = make('div', 'stmn-library-controls');
         const selectorRow = make('div', 'stmn-library-selectors');
@@ -135,7 +139,122 @@ export class LibraryLobby {
         const manage = make('details','stmn-library-manage');
         manage.append(make('summary','','폴더 · 태그 만들기 / 관리'),folderToolbar,tagToolbar);
         this.controls.append(selectorRow, manage, this.editor, this.error);
-        host.insertBefore(this.controls, owner.buildingList);
+        host.insertBefore(this.controls, owner.contentArea);
+
+        // The sidebar is presentation-only. Each item delegates actual chat
+        // switching to the same existing owner.enter(...) method as the list.
+        this.folderDrawer = make('nav','stmn-quiet-folder-drawer');
+        this.folderDrawer.setAttribute('aria-label','채팅 폴더 탐색');
+        this.folderDrawer.hidden = true;
+        const drawerHead = make('div','stmn-quiet-folder-header');
+        drawerHead.append(make('strong','', '라이브러리'));
+        const closeDrawer = button('×','stmn-quiet-folder-close', () => this.setDrawerOpen(false));
+        closeDrawer.setAttribute('aria-label','폴더 탐색 닫기');
+        drawerHead.append(closeDrawer);
+        this.folderDrawerList = make('div','stmn-quiet-folder-tree');
+        this.folderDrawerList.setAttribute('role','group');
+        this.folderDrawer.append(drawerHead,this.folderDrawerList);
+        owner.contentArea.prepend(this.folderDrawer);
+    }
+
+    setDrawerOpen(force) {
+        this.drawerOpen = typeof force === 'boolean' ? force : !this.drawerOpen;
+        this.renderFolderDrawer();
+        this.owner.quiet?.refreshFolderButton();
+    }
+
+    setView(view,folderId = '') {
+        this.view = view;
+        this.folderId = folderId;
+        this.viewSelect.value = view;
+        this.visible = 100;
+        this.draw();
+    }
+
+    /** Read-only current-scope folder explorer. Generates children only when
+     * the user expands a section, with incremental 30-chat batches. */
+    renderFolderDrawer() {
+        const quiet = this.owner.view.root.dataset.elevatorTheme === 'quiet';
+        const open = this.drawerOpen && quiet && this.owner.tab === 'buildings' && Boolean(this.data);
+        this.folderDrawer.hidden = !open;
+        this.owner.quiet?.refreshFolderButton();
+        if (!open) return;
+
+        const oldScroll = this.folderDrawerList.scrollTop;
+        const sections = buildQuietFolderSections(this.owner.buildings,this.owner.scope,this.data);
+        const fragment = document.createDocumentFragment();
+        const currentId = cleanChatId(this.owner.callbacks.context().chatId);
+        for (const section of sections) {
+            const group = make('details','stmn-quiet-folder-section');
+            group.dataset.section = section.key;
+            if (this.selectedFolderKey() === section.key) group.classList.add('stmn-quiet-folder-selected');
+            const summary = make('summary','stmn-quiet-folder-summary');
+            summary.setAttribute('aria-label',section.name+' 폴더 펼치기 · '+section.items.length+'개');
+            summary.append(make('span','stmn-quiet-folder-name',section.name),
+                make('span','stmn-quiet-folder-count',String(section.items.length)));
+            const contents = make('div','stmn-quiet-folder-items');
+
+            const fill = () => {
+                contents.replaceChildren();
+                const only = button('이 목록만 보기','stmn-quiet-folder-filter',()=>{
+                    if (section.kind === 'all') this.setView('all');
+                    else if (section.kind === 'favorites') this.setView('favorites');
+                    else this.setView('folders',section.kind === 'folder' ? section.folderId : '');
+                });
+                only.setAttribute('aria-label',section.name+'만 채팅 목록에 보기');
+                contents.append(only);
+                if (!section.items.length) {
+                    contents.append(make('p','stmn-quiet-folder-empty','채팅이 없습니다.'));
+                    return;
+                }
+                const cap = this.folderPageLimits.get(section.key) || FOLDER_DRAWER_PAGE_SIZE;
+                for (const item of section.items.slice(0,cap)) {
+                    const entry = button('','stmn-quiet-folder-chat',()=>void this.owner.enter(item));
+                    entry.disabled = this.owner.busy;
+                    entry.title = item.name;
+                    entry.setAttribute('aria-label',item.name+' 채팅 열기');
+                    if (item.id === currentId) {
+                        entry.classList.add('stmn-quiet-folder-chat-current');
+                        entry.setAttribute('aria-current','true');
+                    }
+                    entry.append(make('span','stmn-quiet-folder-chat-name',item.name));
+                    if (item.description) entry.append(make('small','stmn-quiet-folder-chat-description',item.description));
+                    contents.append(entry);
+                }
+                if (section.items.length > cap) {
+                    const more = button('더 보기 · '+(section.items.length-cap)+'개 남음',
+                        'stmn-quiet-folder-more',()=>{
+                            this.folderPageLimits.set(section.key,cap+FOLDER_DRAWER_PAGE_SIZE);
+                            fill();
+                        });
+                    contents.append(more);
+                }
+            };
+            group.addEventListener('toggle',()=>{
+                if (!group.isConnected) return;
+                if (group.open) {
+                    this.expandedFolderKeys.add(section.key);
+                    fill();
+                } else {
+                    this.expandedFolderKeys.delete(section.key);
+                    contents.replaceChildren();
+                }
+            });
+            group.append(summary,contents);
+            if (this.expandedFolderKeys.has(section.key)) {
+                group.open=true;
+                fill();
+            }
+            fragment.append(group);
+        }
+        this.folderDrawerList.replaceChildren(fragment);
+        this.folderDrawerList.scrollTop = oldScroll;
+    }
+
+    selectedFolderKey() {
+        if (this.view === 'favorites') return 'favorites';
+        if (this.view === 'folders') return this.folderId ? 'folder:'+this.folderId : 'unfiled';
+        return 'all';
     }
 
     setData(data, scope) {
@@ -147,6 +266,9 @@ export class LibraryLobby {
             this.view = 'all';
             this.viewSelect.value = 'all';
             this.folderId = '';
+            this.drawerOpen = false;
+            this.expandedFolderKeys.clear();
+            this.folderPageLimits.clear();
         }
         this.data = data;
         // Parent refresh renders once after it has updated building + scope.
@@ -207,6 +329,7 @@ export class LibraryLobby {
         const data = this.data;
         if (!data) {
             this.controls.hidden = true;
+            this.renderFolderDrawer();
             return;
         }
         this.controls.hidden = false;
@@ -215,6 +338,7 @@ export class LibraryLobby {
             query: owner.search.value, view: this.view, folderId: this.folderId,
             sort: owner.sort.value,
         });
+        this.renderFolderDrawer();
         owner.buildingsCount.textContent = found.length.toLocaleString() + '개 채팅';
         owner.buildingList.replaceChildren();
         if (!found.length) {
@@ -400,5 +524,8 @@ export class LibraryLobby {
 
     destroy() {
         this.closeEditor();
+        this.folderDrawer.remove();
+        this.expandedFolderKeys.clear();
+        this.folderPageLimits.clear();
     }
 }
