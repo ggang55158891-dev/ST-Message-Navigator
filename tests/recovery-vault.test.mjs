@@ -134,3 +134,58 @@ test('Q07C restore never writes if current scope is different; restored name is 
     assert.match(recoveredFilename('거대한 이름'.repeat(20)),/restored-/);
     assert.ok(recoveredFilename('거대한 이름'.repeat(20)).length<=120);
 });
+
+
+test('Q07C group archive restores as a new file, updates membership after verification, preserves managed tags',async()=>{
+    const state={...ctx(),groupId:55,groups:[{id:55,name:'Group',chat_id:'current',chats:['current']}]};
+    const groupScope='group:55';
+    const lib=emptyLibrary();
+    lib.folders=[{id:'folderA',name:'진행'}];
+    lib.tags=[{id:'tagA',name:'특별'}];
+    lib.records[chatReference(groupScope,'old')]={...emptyRecord(),favorite:true,
+        folderId:'folderA',tagIds:['tagA'],description:'그룹 복구'};
+    const vault=memory();
+    const meta=await vault.store({
+        scope:groupScope,name:'old',raw,isGroup:true,avatar:null,groupId:55,action:'delete',
+        librarySnapshot:lib,
+    });
+    const files=new Map([['current',raw]]);
+    const paths=[];
+    let restoredLibrary=null;
+    let resultName=null;
+    const result=await restoreFromVault({
+        vault,context:()=>state,archiveId:meta.id,
+        libraryRepository:{importAdditively:library=>{restoredLibrary=library;}},
+        fetcher:async(path,opts)=>{
+            const body=JSON.parse(opts.body);
+            paths.push(path);
+            if(path==='/api/chats/export'){
+                const file=body.file.replace(/\.jsonl$/,'');
+                return files.has(file)?response({result:files.get(file)}):{ok:false,status:404};
+            }
+            if(path==='/api/chats/group/save'){
+                assert.equal(files.has(body.id),false);
+                resultName=body.id;
+                files.set(body.id,body.chat.map(x=>JSON.stringify(x)).join('\n'));
+                return response({ok:true});
+            }
+            if(path==='/api/groups/edit'){
+                assert.ok(files.has(resultName));
+                assert.deepEqual(body.chats,['current',resultName]);
+                assert.equal(body.chat_id,'current');
+                return response({ok:true});
+            }
+            throw new Error(path);
+        },
+    });
+    assert.ok(result.newId.startsWith('old - restored'));
+    assert.equal(state.groups[0].chat_id,'current');
+    assert.deepEqual(state.groups[0].chats,['current',result.newId]);
+    assert.deepEqual(parseChatJsonl(files.get(result.newId))[1].swipes,['원본','대안']);
+    assert.equal(files.get('current'),raw);
+    assert.equal(restoredLibrary.records[chatReference(groupScope,'old')],undefined);
+    assert.equal(restoredLibrary.records[chatReference(groupScope,result.newId)].description,'그룹 복구');
+    assert.equal(restoredLibrary.tags[0].id,'tagA');
+    assert.ok(paths.includes('/api/chats/group/save'));
+    assert.ok(paths.includes('/api/groups/edit'));
+});
