@@ -56,9 +56,9 @@ async function post(ctx,url,body,fetcher=fetch) {
     return result;
 }
 
-export async function archiveBeforeAction({vault,context,scope,buildings,id,kind,library,fetcher=fetch}){
+export async function archiveBeforeAction({vault,context,scope,buildings,id,kind,newName=null,library,fetcher=fetch}){
     const ctx=context();
-    const plan=validateFilePlan(ctx,scope,buildings,id,kind);
+    const plan=validateFilePlan(ctx,scope,buildings,id,kind,newName);
     if(typeof ctx.getRequestHeaders!=='function')
         throw new Error('SillyTavern 인증 헤더를 사용할 수 없습니다.');
     const chatRef=ctx.chat,activeId=ctx.chatId;
@@ -68,11 +68,19 @@ export async function archiveBeforeAction({vault,context,scope,buildings,id,kind
     if(buildingScope(latest)!==scope || latest.chat!==chatRef ||
        latest.chatId!==activeId)throw new Error('보관 도중 채팅이 바뀌었습니다. 작업을 취소합니다.');
     const record=storageSnapshot(library,scope,id);
-    return vault.store({
+    const archived=await vault.store({
         scope,name:plan.source,raw,isGroup:plan.isGroup,
         avatar:plan.avatar,groupId:plan.isGroup?ctx.groupId:null,
         action:kind,librarySnapshot:record,
     });
+    // Guard against a stale copy if another extension edits the JSONL
+    // while the browser is committing/verifying its local archive.
+    const fresh=await getRaw(context(),{...plan,id:plan.source},fetcher);
+    if(fresh===null || await hashJsonl(fresh)!==archived.hash ||
+       buildingScope(context())!==scope || context().chatId!==activeId ||
+       context().chat!==chatRef)
+        throw new Error('보관 이후 원본 내용/채팅이 달라져 작업을 중단했습니다.');
+    return archived;
 }
 
 export async function confirmActionResult({
