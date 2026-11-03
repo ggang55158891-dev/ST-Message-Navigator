@@ -24,6 +24,9 @@ const PATHS = {
     'x': '<path d="M18 6 6 18M6 6l12 12"/>',
     'check': '<path d="m20 6-11 11-5-5"/>',
     'search': '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+    'star': '<path d="m12 2 3.1 6.4 7 .9-5.1 5 .9 7-5.9-3.3-5.9 3.3.9-7-5.1-5 7-.9z"/>',
+    'eye': '<path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    'more': '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
 };
 function icon(name) {
     // Icons are static, authored markup; no chat data is interpolated.
@@ -556,18 +559,72 @@ export class NavigatorView {
                 cancel.addEventListener('click', () => this.cancelEdit());
                 row.append(ok, cancel);
             } else {
-                const edit = button('edit', '#' + entry.index + ' 제목 수정', 'pencil');
-                edit.classList.add('stmn-row-action');
-                edit.addEventListener('click', () => {
+                const editTitle = () => {
                     this.editing = entry.index;
                     this.editValue = entry.custom ? entry.title : automaticTitle(entry.message);
                     this.renderRows(true);
-                });
+                };
+                const bookmark = button('bookmark', '#' + entry.index + ' 북마크', 'star');
+                bookmark.classList.add('stmn-quiet-message-action','stmn-quiet-bookmark');
+                const marked = Boolean(this.callbacks.isBookmarked?.(entry.index));
+                bookmark.classList.toggle('stmn-quiet-bookmarked',marked);
+                bookmark.setAttribute('aria-pressed',String(marked));
+                bookmark.title = marked ? '북마크 해제' : '북마크 추가';
+                bookmark.addEventListener('click', () => void this.callbacks.toggleBookmark?.(entry.index));
+                row.append(bookmark);
+                const edit = button('edit', '#' + entry.index + ' 제목 수정', 'pencil');
+                edit.classList.add('stmn-row-action');
+                edit.addEventListener('click', editTitle);
                 row.append(edit);
+                const peek = button('peek', '#' + entry.index + ' 내용 미리보기', 'eye');
+                peek.classList.add('stmn-quiet-message-action');
+                peek.addEventListener('click', () => this.showQuietMessagePreview(entry));
+                row.append(peek);
+                const menu = el('details','stmn-quiet-message-menu');
+                const summary = el('summary','');
+                summary.append(icon('more'));
+                summary.title = '#' + entry.index + ' 메시지 메뉴';
+                summary.setAttribute('aria-label',summary.title);
+                const actions = el('div','stmn-quiet-message-menu-body');
+                const jump = el('button','stmn-quiet-menu-item','이 메시지로 이동');
+                jump.type = 'button';
+                jump.addEventListener('click', () => { menu.open = false; this.callbacks.goToIndex(entry.index); });
+                const rename = el('button','stmn-quiet-menu-item','제목 수정');
+                rename.type = 'button';
+                rename.addEventListener('click', () => { menu.open = false; editTitle(); });
+                const info = el('button','stmn-quiet-menu-item','내용 미리보기');
+                info.type = 'button';
+                info.addEventListener('click', () => { menu.open = false; this.showQuietMessagePreview(entry); });
+                actions.append(jump, rename, info);
+                menu.append(summary,actions);
+                row.append(menu);
             }
             fragment.append(row);
         }
         this.spacer.append(fragment);
+    }
+
+    /** Q-02 safe preview for the CURRENTLY LOADED chat only.
+     * Other chat contents and full hover tooltips are Q-04. */
+    showQuietMessagePreview(entry) {
+        this.panel.querySelector('.stmn-quiet-message-preview')?.remove();
+        const pane = el('section','stmn-quiet-message-preview');
+        pane.setAttribute('role','dialog');
+        pane.setAttribute('aria-label','#'+entry.index+' 메시지 내용 미리보기');
+        const top = el('div','stmn-quiet-message-preview-top');
+        top.append(el('strong','', '#'+entry.index+' · '+entry.title));
+        const close = el('button','stmn-quiet-preview-close','×');
+        close.type = 'button';
+        close.setAttribute('aria-label','미리보기 닫기');
+        close.addEventListener('click',()=>pane.remove());
+        top.append(close);
+        const body = el('div','stmn-quiet-message-preview-text',
+            String(entry.message?.mes || '(내용 없는 메시지)').slice(0,680));
+        pane.append(top,body);
+        if (String(entry.message?.mes || '').length > 680)
+            pane.append(el('small','', '처음 680자만 표시합니다.'));
+        this.panel.append(pane);
+        close.focus();
     }
 
     async commitEdit(index) {
