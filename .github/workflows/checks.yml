@@ -15,7 +15,7 @@ jobs:
           node-version: '22'
       - name: Check syntax
         run: |
-          for file in index.js model.js scroll.js ui.js position.js outline.js building-data.js buildings.js elevator-ui.js diagnostics.js diagnostics-ui.js settings-backup.js settings-backup-ui.js metadata-audit.js panel-size.js library-data.js library-repository.js library-backup-ui.js library-operations.js library-ui.js quiet-ui.js quiet-preview.js update-ui.js quiet-folders.js chat-preview.js chat-preview-ui.js swipe-marks.js swipe-manager-ui.js file-backup-zip.js file-backup.js batch-file-ui.js; do
+          for file in index.js model.js scroll.js ui.js position.js outline.js building-data.js buildings.js elevator-ui.js diagnostics.js diagnostics-ui.js settings-backup.js settings-backup-ui.js metadata-audit.js panel-size.js library-data.js library-repository.js library-backup-ui.js library-operations.js library-ui.js quiet-ui.js quiet-preview.js update-ui.js quiet-folders.js chat-preview.js chat-preview-ui.js swipe-marks.js swipe-manager-ui.js file-backup-zip.js file-backup.js batch-file-ui.js file-operations.js file-action-ui.js; do
             node --experimental-default-type=module --check "$file"
           done
       - name: Run unit tests
