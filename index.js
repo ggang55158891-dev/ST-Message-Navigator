@@ -61,6 +61,7 @@ class NavigatorApp {
             saveTitle: (index, title) => this.saveTitle(index, title),
             isBookmarked: index => isMessageBookmarked(context().chat?.[index], context().chatMetadata),
             toggleBookmark: index => this.toggleBookmark(index),
+            selectSwipe: (index, swipeIndex) => this.selectQuietSwipe(index, swipeIndex),
             getPosition: () => this.settings.position,
             savePosition: position => this.changeSetting('position', position),
             getPanelSize: () => this.settings.panelSize,
@@ -353,6 +354,50 @@ class NavigatorApp {
         this.highlightedNode = null;
     }
 
+    /** Select an existing swipe through SillyTavern's own swipe engine.
+     * Do not edit swipe_id/mes directly: native swipe processing also updates
+     * media, UI counters and downstream message state. */
+    async selectQuietSwipe(index, swipeIndex) {
+        const ctx=context();
+        const chat=ctx.chat;
+        const chatId=ctx.chatId;
+        const message=chat?.[index];
+        if (!Number.isSafeInteger(index) || index<0 ||
+            !Number.isSafeInteger(swipeIndex) || swipeIndex<0 ||
+            !Array.isArray(message?.swipes) || swipeIndex>=message.swipes.length) {
+            throw new Error('유효한 스와이프를 선택해 주세요.');
+        }
+        if (message.swipe_id === swipeIndex) return true;
+        if (typeof ctx.swipe?.to !== 'function') {
+            throw new Error('이 SillyTavern 버전에서는 스와이프 선택 API를 사용할 수 없습니다.');
+        }
+        // Earlier chat messages can be virtualized and not yet in the
+        // SillyTavern DOM; navigate before requesting core swipe transition.
+        const reached=await this.goToIndex(index);
+        if (!reached || context().chat!==chat || context().chatId!==chatId) {
+            throw new Error('메시지 위치로 이동하지 못했습니다. 스와이프는 변경하지 않았습니다.');
+        }
+        const node=Array.from(document.querySelectorAll('#chat > .mes[mesid]'))
+            .find(el=>Number(el.getAttribute('mesid'))===index);
+        if (!node?.querySelector('.mes_block .mes_text')) {
+            throw new Error('SillyTavern 메시지 본문이 화면에 없어 스와이프를 변경할 수 없습니다.');
+        }
+        await ctx.swipe.to(null,'right',{
+            source:'swipe_picker',
+            message,
+            forceMesId:index,
+            forceSwipeId:swipeIndex,
+            forceDuration:0,
+        });
+        if (context().chat!==chat || context().chatId!==chatId ||
+            chat[index]!==message || message.swipe_id!==swipeIndex) {
+            throw new Error('스와이프 전환 결과를 확인할 수 없습니다. 채팅 내용을 확인해 주세요.');
+        }
+        this.diagnostics.record('navigation','quiet_swipe_selected',
+            {status:'ok',targetIndex:index});
+        return true;
+    }
+
     async toggleBookmark(index) {
         if (this.bookmarkSaving) return;
         const ctx = context();
@@ -429,7 +474,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.8.0)');
+        console.info(PREFIX, 'loaded (v1.9.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
