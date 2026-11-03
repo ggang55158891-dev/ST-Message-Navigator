@@ -723,6 +723,94 @@ async function run() {
             assert.equal(mockBody[1].global,false);
         });
 
+        await check('Q03 Quiet folder drawer expands lazily, filters and navigates without moving JSONL', async setup => {
+            const page=await setup(24);
+            await page.evaluate(async()=>{
+                const {emptyLibrary,emptyRecord,chatReference}=await import('/library-data.js');
+                const lib=emptyLibrary();
+                lib.folders=[{id:'f_progress',name:'진행 중'},{id:'f_done',name:'완성작'}];
+                for(let i=0;i<83;i++){
+                    lib.records[chatReference('character:none','chat-'+i)]={
+                        ...emptyRecord(),folderId:'f_progress',favorite:i%10===0,
+                        description:'장면 '+i,
+                    };
+                }
+                const cb=window.__stmnView.callbacks;
+                cb.readLibrary=()=>lib;
+                cb.listBuildings=async()=>({
+                    scope:'character:none',title:'Character',
+                    buildings:Array.from({length:120},(_,i)=>({
+                        id:'chat-'+i,name:'File '+i,lastActivity:120-i,count:4,
+                    })),
+                });
+                window.__q03Library=lib;
+                window.__q03Before=JSON.stringify(lib);
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-building-card').first().waitFor();
+            assert.equal(await page.locator('.stmn-building-card').count(),100,
+                'Main list continues to render in pages');
+            await page.getByRole('button',{name:'폴더 탐색 열기'}).click();
+            const drawer=page.locator('#stmn-quiet-folder-drawer');
+            await drawer.waitFor({state:'visible'});
+            assert.equal(await page.getByRole('button',{name:'폴더 탐색 닫기'}).first()
+                .getAttribute('aria-expanded'),'true');
+            assert.equal(await drawer.locator('.stmn-quiet-folder-section').count(),5);
+            assert.equal(await drawer.locator('.stmn-quiet-folder-chat').count(),0,
+                'Closed folders must NOT instantiate 120 chat buttons');
+            const progress=drawer.locator('[data-section="folder:f_progress"]');
+            await progress.locator('summary').click();
+            assert.equal(await progress.locator('.stmn-quiet-folder-chat').count(),30);
+            assert.equal((await progress.locator('.stmn-quiet-folder-chat').first().textContent())
+                .includes('File 0'),true);
+            await progress.getByRole('button',{name:/더 보기/}).click();
+            assert.equal(await progress.locator('.stmn-quiet-folder-chat').count(),60);
+            const done=drawer.locator('[data-section="folder:f_done"]');
+            await done.locator('summary').click();
+            assert.match(await done.locator('.stmn-quiet-folder-empty').textContent(),/채팅이 없습니다/);
+            await progress.getByRole('button',{name:'진행 중만 채팅 목록에 보기'}).click();
+            assert.equal(await page.locator('.stmn-building-card').count(),83,
+                'The folder filter must exclude the other 37 chats');
+            assert.equal(await page.locator('.stmn-quiet-folder-selected').getAttribute('data-section'),
+                'folder:f_progress');
+            const favorites=drawer.locator('[data-section="favorites"]');
+            await favorites.locator('summary').click();
+            await favorites.getByRole('button',{name:'즐겨찾기만 채팅 목록에 보기'}).click();
+            assert.equal(await page.locator('.stmn-building-card').count(),9);
+            await drawer.locator('[data-section="all"] summary').click();
+            await drawer.getByRole('button',{name:'전체 채팅만 채팅 목록에 보기'}).click();
+            assert.equal(await page.locator('.stmn-building-card').count(),100);
+            await drawer.locator('[data-section="folder:f_progress"] .stmn-quiet-folder-chat').first().click();
+            await page.waitForFunction(()=>window.__stmnContext.chatId==='chat-0');
+            assert.equal(await page.getByRole('tab',{name:'층 안내'}).getAttribute('aria-selected'),'true');
+            assert.equal(await page.evaluate(()=>JSON.stringify(window.__q03Library)===window.__q03Before),
+                true,'Folder navigation must not write/delete chat records');
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('classic','auto'));
+            assert.equal(await drawer.isVisible(),false,
+                'Legacy themes must not show the Quiet folder drawer');
+            assert.equal(await page.locator('.stmn-building-card').first().isVisible(),true);
+        });
+
+        await check('Q03 narrow Quiet panel overlays drawer without hiding the chat list', async setup => {
+            const page=await setup(15,{width:375,height:667});
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('quiet','auto'));
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-building-card').first().waitFor();
+            await page.getByRole('button',{name:'폴더 탐색 열기'}).click();
+            const drawer=page.locator('#stmn-quiet-folder-drawer');
+            await drawer.waitFor({state:'visible'});
+            const mainWidth=await page.locator('.stmn-building-list').evaluate(el=>el.getBoundingClientRect().width);
+            const drawerWidth=await drawer.evaluate(el=>el.getBoundingClientRect().width);
+            assert.ok(mainWidth>180,'Mobile main list remains full width, not squeezed: '+mainWidth);
+            assert.ok(drawerWidth>0 && drawerWidth<300);
+            await drawer.getByRole('button',{name:'폴더 탐색 닫기'}).click();
+            assert.equal(await drawer.isVisible(),false);
+        });
+
         await check('D library aliases, favorites, folder assignment and persistence', async setup => {
             const page = await setup(23);
             await page.evaluate(async () => {
