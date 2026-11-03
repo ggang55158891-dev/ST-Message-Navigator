@@ -1188,3 +1188,119 @@
 @media (prefers-reduced-motion: reduce) {
     #stmn-root[data-elevator-theme="quiet"] .stmn-quiet-folder-summary::before {transition:none}
 }
+
+
+/* Q-04 Quiet eye: only the icon requests other chat content. */
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-eye {
+    width:27px;min-width:27px;height:30px;
+    display:grid;place-items:center;flex:none;
+    border:0;border-radius:8px;padding:2px;
+    color:#89918b;background:transparent;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-eye:hover,
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-eye:focus-visible {
+    background:#f0f1ef;color:#323735;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-eye:focus-visible {
+    outline:2px solid #545b56;outline-offset:2px;
+}
+.stmn-quiet-chat-tooltip {
+    position:fixed;z-index:2147480000;
+    width:min(410px,calc(100vw - 16px));
+    padding:18px 20px;background:#fff;color:#505650;
+    border:1px solid #e7e9e5;border-radius:17px;
+    box-shadow:0 19px 55px #21262324;
+    pointer-events:none;box-sizing:border-box;
+    overflow:auto;overscroll-behavior:contain;
+    font:12px/1.7 system-ui,-apple-system,"Malgun Gothic",sans-serif;
+}
+.stmn-quiet-chat-tooltip[hidden] {display:none!important}
+.stmn-quiet-chat-tooltip strong {display:block;font-size:12px;margin:0 0 11px}
+.stmn-quiet-chat-tooltip-titles {display:grid;gap:7px;line-height:1.5}
+.stmn-quiet-chat-tooltip-title {
+    display:grid;grid-template-columns:36px minmax(0,1fr);
+    gap:8px;align-items:start;font-size:11px;
+}
+.stmn-quiet-chat-tooltip-title span:first-child {color:#a1a8a1}
+.stmn-quiet-chat-tooltip-title span:last-child {
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.stmn-quiet-chat-tooltip-divider {height:1px;background:#e9ebe7;margin:15px 0}
+.stmn-quiet-chat-tooltip-body {
+    white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;
+    max-height:330px;overflow:hidden;color:#777f77;
+}
+.stmn-quiet-chat-tooltip p {margin:0;color:#939a93}
+@media(hover:none) {.stmn-quiet-chat-tooltip {display:none!important}}
+
+/* Full message-directory preview is an overlay inside the lobby. A single
+ * virtualized scroll list keeps even 10k titles at a small DOM count. */
+#stmn-root .stmn-quiet-chat-detail[hidden],
+#stmn-root .stmn-quiet-chat-detail-list[hidden] {display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail:not([hidden]) {
+    box-sizing:border-box;
+    display:flex;flex-direction:column;
+    position:absolute;inset:0;z-index:32;
+    min-width:0;min-height:0;
+    padding:8px 13px 12px;
+    color:#353a36;background:#fdfdfc;
+    border:1px solid #eceeeb;border-radius:16px;
+    box-shadow:0 13px 38px #2026201e;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-header {
+    display:flex;justify-content:space-between;align-items:center;
+    gap:10px;padding:9px 2px 12px;
+    border-bottom:1px solid #eeefec;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-headings {
+    min-width:0;display:flex;flex-direction:column;gap:4px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-headings strong {
+    font-size:14px;font-weight:750;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-headings small {
+    color:#a2a9a3;font-size:10px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-close {
+    flex:none;padding:1px 9px;
+    background:transparent;border:0;border-radius:9px;
+    cursor:pointer;color:#989f99;font-size:23px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-close:hover {
+    background:#f0f1ef;color:#333a34;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-status {
+    color:#929a93;font-size:11px;line-height:1.6;
+    padding:9px 2px 3px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-status:empty {display:none}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-list {
+    position:relative;flex:1;min-height:0;
+    overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;scrollbar-color:#d8ddd7 transparent;
+    padding-top:8px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-spacer {
+    width:100%;position:relative;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-row {
+    position:absolute;left:0;right:0;
+    width:100%;min-width:0;
+    display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;
+    gap:8px;text-align:left;
+    padding:0 8px;background:transparent;
+    border:0;border-bottom:1px solid #f0f1ee;
+    cursor:pointer;color:#424942;font:inherit;font-size:12px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-row:hover,
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-row:focus-visible {
+    background:#f3f5f2;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-index {
+    color:#a2aba3;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-detail-name {
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+    font-weight:550;
+}
