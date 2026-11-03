@@ -66,7 +66,8 @@ test('E03A browser-stream bounded JSON fetch supports current-character read onl
     assert.equal(JSON.parse(calls[0].init.body).file_name,'chat-a');
     assert.equal(calls[0].init.method,'POST');
     assert.equal(calls.length,1);
-    assert.ok(!JSON.stringify(read).includes('끝에서 사과를 하나 더 찾았다.'));
+    assert.ok(read.matches.every(x=>x.excerpt.length<=SEARCH_SNIPPET_CHARS+2));
+    assert.ok(read.matches.every(x=>!Object.hasOwn(x,'mes') && !Object.hasOwn(x,'swipes')));
 });
 
 test('E03A protects scope and avoids any unauthorized cross-character file fetch',async()=>{
