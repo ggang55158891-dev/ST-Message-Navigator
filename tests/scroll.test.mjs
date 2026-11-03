@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getCurrentIndex, scrollToMessage, NavigationCursor } from '../scroll.js';
+import { getCurrentIndex, scrollToMessage, NavigationCursor, isPastMessageStart, canScrollToChatBottom } from '../scroll.js';
 import { findTarget } from '../model.js';
 function node(id, top, height = 100) {
     return { getAttribute: () => `${id}`, getBoundingClientRect: () => ({ top, bottom: top + height, height }) };
@@ -82,4 +82,30 @@ test('scrolling aligns using the inner scrollport instead of its border', () => 
     assert.equal(scrollToMessage(chat, node(8, 300)), true);
     assert.equal(target.top, 225);
     assert.equal(target.behavior, 'instant');
+});
+
+
+test('Q05 mid-message detection uses the same start anchor as scrollToMessage', () => {
+    const chat={
+        clientTop:2,
+        getBoundingClientRect:()=>({top:100}),
+    };
+    assert.equal(isPastMessageStart(chat,node(2,114,700)),false,
+        '12px padding at message start is not a middle position');
+    assert.equal(isPastMessageStart(chat,node(2,91,700)),false,
+        'small theme shifts must not cause an extra previous press');
+    assert.equal(isPastMessageStart(chat,node(2,25,700)),true);
+    assert.equal(isPastMessageStart(chat,node(2,-500,0)),false,
+        'hidden/zero-height messages are not restart targets');
+    assert.equal(isPastMessageStart(null,node(2,25,700)),false);
+});
+
+test('Q05 next at final message reaches bottom only while scrollable', () => {
+    const chat={scrollTop:200,scrollHeight:1000,clientHeight:350};
+    assert.equal(canScrollToChatBottom(chat),true);
+    chat.scrollTop=648;
+    assert.equal(canScrollToChatBottom(chat),false,'bottom tolerance avoids floating jitter');
+    chat.scrollTop=650;
+    assert.equal(canScrollToChatBottom(chat),false);
+    assert.equal(canScrollToChatBottom(null),false);
 });
