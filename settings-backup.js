@@ -17,10 +17,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
     panelSize: null,
 });
 export const SETTINGS_FIELDS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
+// One accepted theme list for live selections, initialization and backups.
+export const ELEVATOR_THEMES = Object.freeze(['classic', 'restricted', 'sky', 'quiet']);
 const OPTIONS = Object.freeze({
     mode: ['visible', 'all'],
     side: ['left', 'right'],
-    elevatorTheme: ['classic', 'restricted', 'sky', 'quiet'],
+    elevatorTheme: ELEVATOR_THEMES,
     elevatorSky: ['auto', 'day', 'night'],
 });
 const BOOLEAN_FIELDS = ['showNavigationButtons', 'diagnosticsEnabled'];
