@@ -430,6 +430,127 @@ async function run() {
             assert.equal(await page.locator('.stmn-outline-jumps').isVisible(), false);
         });
 
+        await check('Q06 native message toolbar saves favorites/tags, filters, compares and selects swipe', async setup => {
+            const page=await setup(2,undefined,true);
+            await page.evaluate(()=>{
+                const ctx=window.__themeAppContext;
+                ctx.chat[0].swipes=[
+                    '첫 번째 전체 원문 '+ '가'.repeat(1250),
+                    '두 번째 후보 '+ '나'.repeat(1350),
+                    '세 번째 비교 대상 '+ '다'.repeat(1460),
+                ];
+                ctx.chat[0].swipe_id=0;
+                ctx.chat[0].mes=ctx.chat[0].swipes[0];
+                ctx.chat[0].swipe_info=[{key:'keep1'},{key:'keep2'},{key:'keep3'}];
+                ctx.chatMetadata={outside:{keep:true}};
+                window.__q06Saves=0;window.__q06Swipes=[];
+                ctx.saveMetadata=async()=>{
+                    window.__q06Saves++;
+                    window.__q06Snapshot=structuredClone(ctx.chatMetadata);
+                };
+                ctx.swipe={to:async (_event,_direction,options)=>{
+                    window.__q06Swipes.push(options);
+                    const m=ctx.chat[options.forceMesId];
+                    m.swipe_id=options.forceSwipeId;
+                    m.mes=m.swipes[options.forceSwipeId];
+                }};
+                const host=document.querySelector('#chat');
+                for(let i=0;i<2;i++){
+                    const row=document.createElement('div');
+                    row.className='mes';row.setAttribute('mesid',String(i));
+                    row.style.height='170px';
+                    row.innerHTML='<div class="mes_block"><div class="mes_buttons"></div><div class="mes_text">Message</div></div>';
+                    host.append(row);
+                }
+            });
+            const tool=page.getByRole('button',{name:'메시지 #0 스와이프 관리'});
+            await tool.waitFor({state:'visible'});
+            assert.equal(await page.locator('#chat > .mes[mesid="0"] .stmn-swipe-tool').count(),1);
+            await tool.click();
+            const dialog=page.locator('.stmn-swipe-dialog');
+            await dialog.waitFor({state:'visible'});
+            assert.equal(await dialog.locator('.stmn-swipe-card').count(),3);
+            assert.ok((await dialog.locator('.stmn-swipe-card-text').first().textContent()).length>1250,
+                'Complete first swipe must be present, not truncated');
+            await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).click();
+            assert.equal(await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).getAttribute('aria-pressed'),'true');
+            assert.equal(await page.evaluate(()=>window.__q06Saves),1);
+            await dialog.locator('[data-swipe-index="1"] .stmn-swipe-edit').click();
+            await dialog.getByRole('textbox',{name:'스와이프 #2 태그 수정'}).fill('재미, 액션');
+            await dialog.locator('[data-swipe-index="1"] .stmn-swipe-tag-editor').getByRole('button',{name:'저장'}).click();
+            await page.waitForFunction(()=>window.__q06Saves===2);
+            assert.deepEqual(await dialog.locator('[data-swipe-index="1"] .stmn-swipe-tag').allTextContents(),['재미','액션']);
+
+            await dialog.getByRole('button',{name:'★ 즐겨찾기'}).click();
+            assert.equal(await dialog.locator('.stmn-swipe-card').count(),1);
+            assert.equal(await dialog.locator('.stmn-swipe-card').first().getAttribute('data-swipe-index'),'1');
+            await dialog.locator('.stmn-swipe-filter-tags').selectOption('액션');
+            assert.equal(await dialog.locator('.stmn-swipe-card').count(),1);
+            await dialog.getByRole('button',{name:'전체',exact:true}).click();
+            await dialog.getByRole('checkbox',{name:'스와이프 #1 비교 선택'}).check();
+            await dialog.getByRole('checkbox',{name:'스와이프 #3 비교 선택'}).check();
+            assert.equal(await dialog.locator('.stmn-swipe-compare-column').count(),2);
+            const full=await dialog.locator('.stmn-swipe-compare-text').allTextContents();
+            assert.ok(full[0].length>1200&&full[1].length>1400,
+                'Comparison must not truncate full swipe bodies');
+            await dialog.getByRole('button',{name:'스와이프 #3 현재 답변으로 적용'}).click();
+            await page.waitForFunction(()=>window.__q06Swipes.length===1);
+            const actual=await page.evaluate(()=>{
+                const ctx=window.__themeAppContext;
+                return {active:ctx.chat[0].swipe_id,bodies:ctx.chat[0].swipes.length,
+                    swipeInfo:ctx.chat[0].swipe_info.map(x=>x.key),
+                    other:ctx.chatMetadata.outside.keep,
+                    saved:window.__q06Snapshot,
+                    options:window.__q06Swipes[0],
+                };
+            });
+            assert.equal(actual.active,2);
+            assert.equal(actual.bodies,3);
+            assert.deepEqual(actual.swipeInfo,['keep1','keep2','keep3']);
+            assert.equal(actual.other,true);
+            assert.equal(actual.options.forceMesId,0);
+            assert.equal(actual.options.forceSwipeId,2);
+            const stableId=await page.evaluate(()=>window.__themeAppContext.chat[0].stmn_message_id_v1);
+            assert.ok(actual.saved.stmn_message_outline_v1.swipeAnnotations[stableId],
+                'Swipe marks must persist in extension-owned per-message metadata');
+            await dialog.getByRole('button',{name:'스와이프 관리 닫기'}).click();
+            assert.equal(await dialog.isVisible(),false);
+            assert.equal(await page.locator('#chat .stmn-swipe-tool').count(),1,
+                'A single toolbar icon is mounted without duplicates');
+        });
+
+        await check('Q06 failed metadata save rolls back swipe annotations and leaves other fields untouched', async setup => {
+            const page=await setup(2,undefined,true);
+            await page.evaluate(()=>{
+                const ctx=window.__themeAppContext;
+                ctx.chat[0].swipes=['원문 A','원문 B'];
+                ctx.chat[0].swipe_id=0;
+                ctx.chatMetadata={outside:{keep:'safe'}};
+                ctx.saveMetadata=async()=>{throw Error('저장 장치 오류');};
+                const row=document.createElement('div');
+                row.className='mes';
+                row.setAttribute('mesid','0');
+                row.innerHTML='<div class="mes_block"><div class="mes_buttons"></div><div class="mes_text">A</div></div>';
+                document.querySelector('#chat').append(row);
+            });
+            await page.getByRole('button',{name:'메시지 #0 스와이프 관리'}).click();
+            const dialog=page.locator('.stmn-swipe-dialog');
+            await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).click();
+            await page.waitForFunction(()=>
+                document.querySelector('.stmn-swipe-feedback')?.textContent.includes('저장 장치 오류'));
+            const data=await page.evaluate(()=>{
+                const ctx=window.__themeAppContext;
+                return {outside:ctx.chatMetadata.outside.keep,
+                    hasMarks:Object.prototype.hasOwnProperty.call(ctx.chatMetadata,'stmn_message_outline_v1'),
+                    hasId:Object.prototype.hasOwnProperty.call(ctx.chat[0],'stmn_message_id_v1'),
+                    bodies:ctx.chat[0].swipes.slice(),active:ctx.chat[0].swipe_id};
+            });
+            assert.deepEqual(data,{outside:'safe',hasMarks:false,hasId:false,bodies:['원문 A','원문 B'],active:0});
+            assert.equal(await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).getAttribute('aria-pressed'),
+                'false','Failed save must not make a favorite appear persisted');
+            await dialog.getByRole('button',{name:'스와이프 관리 닫기'}).click();
+        });
+
         await check('Q05 previous restarts current message before going back; next on last goes bottom; no white outline', async setup => {
             const page=await setup(6);
             await page.evaluate(async()=>{

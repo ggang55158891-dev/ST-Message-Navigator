@@ -9,6 +9,9 @@ import { Diagnostics } from './diagnostics.js';
 import { DEFAULT_SETTINGS, SETTINGS_FIELDS, ELEVATOR_THEMES, normalizeSettings, diffSettings } from './settings-backup.js';
 import { inspectTitleMetadata } from './metadata-audit.js';
 import { LibraryRepository } from './library-repository.js';
+import { setSwipeAnnotation } from './swipe-marks.js';
+import { SwipeManagerUI } from './swipe-manager-ui.js';
+import { DATA_KEY, MESSAGE_KEY } from './model.js';
 
 const PREFIX = '[ST Message Navigator]';
 let app;
@@ -37,6 +40,7 @@ class NavigatorApp {
         this.diagnostics = new Diagnostics({ enabled: this.settings.diagnosticsEnabled });
         this.navSerial = 0;
         this.bookmarkSaving = false;
+        this.swipeMarkSaving = false;
         this.busy = false;
         this.lastNavigated = -1;
         this.lastLanding = null;
@@ -85,6 +89,12 @@ class NavigatorApp {
             getTheme: () => this.settings.elevatorTheme,
             getSkyMode: () => this.settings.elevatorSky,
             logDiagnostic: (category, code, details) => this.diagnostics.record(category, code, details),
+        });
+        this.swipeManager = new SwipeManagerUI({
+            context,
+            selectSwipe: (index, swipeIndex) => this.selectQuietSwipe(index,swipeIndex),
+            saveMark: (index,swipeIndex,patch) => this.saveSwipeMark(index,swipeIndex,patch),
+            status: (message,error) => this.view.setStatus(message,error),
         });
         this.view.setNavigationButtonsVisible(this.settings.showNavigationButtons);
         this.view.position(this.settings.side);
@@ -149,6 +159,7 @@ class NavigatorApp {
         this.startLanding = null;
         this.lastLanding = null;
         this.chatElement = current;
+        this.swipeManager?.bind(current);
         this.chatElement?.addEventListener('scroll', this.chatScrollHandler, { passive: true });
         this.resizeObserver?.disconnect();
         this.resizeObserver = null;
@@ -224,6 +235,7 @@ class NavigatorApp {
             this.listeners.push([events[key], cb]);
         };
         register('CHAT_CHANGED', () => {
+            this.swipeManager.close();
             this.diagnostics.record('lifecycle', 'chat_changed', { status: 'ok' });
             this.navSerial++;
             this.busy = false;
@@ -264,12 +276,17 @@ class NavigatorApp {
         this.refreshTimer = setTimeout(() => {
             this.refreshTimer = null;
             this.bindChatScroll();
-            if (this.pendingReset) {
+            const chatChanged = Boolean(this.pendingReset);
+            if (chatChanged) {
                 this.pendingReset = false;
                 this.lastNavigated = -1;
                 this.view.rebuild();
             } else this.view.rebuild({ keepScroll: true });
             this.updateCurrent();
+            // The toolbar observer handles newly added messages in real time.
+            // Scan pre-existing toolbars only on full chat changes, never on
+            // per-token streaming/message updates.
+            if (chatChanged) this.swipeManager?.scan();
         }, 90);
     }
 
@@ -448,6 +465,53 @@ class NavigatorApp {
         return true;
     }
 
+    /**
+     * Save only extension-owned metadata using a copy-on-write snapshot.
+     * No swipe text, order, active swipe, or third-party fields are modified.
+     */
+    async saveSwipeMark(index,swipeIndex,patch) {
+        if(this.swipeMarkSaving) throw new Error('이전 스와이프 저장이 끝난 뒤 다시 시도해 주세요.');
+        const ctx=context();
+        const chat=ctx.chat, chatId=ctx.chatId, metadata=ctx.chatMetadata;
+        if(!ctx.chatId || !chat?.[index] || !metadata || typeof ctx.saveMetadata!=='function') {
+            throw new Error('현재 채팅의 메타데이터를 저장할 수 없습니다.');
+        }
+        const msg=chat[index];
+        const previousId=msg[MESSAGE_KEY];
+        const previousStore=metadata[DATA_KEY];
+        // The original store is not mutated before save succeeds.
+        if(previousStore) metadata[DATA_KEY]=structuredClone(previousStore);
+        this.swipeMarkSaving=true;
+        let changed=false;
+        try {
+            changed=setSwipeAnnotation(chat,metadata,index,swipeIndex,patch);
+            if(!changed) {
+                if(previousStore===undefined)delete metadata[DATA_KEY];
+                else metadata[DATA_KEY]=previousStore;
+                return false;
+            }
+            await ctx.saveMetadata();
+            if(context().chat!==chat || context().chatId!==chatId) {
+                throw new Error('저장 중 채팅이 전환되었습니다. 저장 결과를 확인해 주세요.');
+            }
+            this.diagnostics.record('save','swipe_mark_saved',
+                {status:'ok',targetIndex:index});
+            return true;
+        } catch(error) {
+            if(context().chat===chat && context().chatId===chatId) {
+                if(previousStore===undefined) delete metadata[DATA_KEY];
+                else metadata[DATA_KEY]=previousStore;
+                if(previousId===undefined) delete msg[MESSAGE_KEY];
+                else msg[MESSAGE_KEY]=previousId;
+            }
+            this.diagnostics.record('save','swipe_mark_failed',
+                {status:'error',targetIndex:index,error});
+            throw error;
+        } finally {
+            this.swipeMarkSaving=false;
+        }
+    }
+
     async toggleBookmark(index) {
         if (this.bookmarkSaving) return;
         const ctx = context();
@@ -512,6 +576,7 @@ class NavigatorApp {
         if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
         this.resizeObserver?.disconnect();
         this.observer?.disconnect();
+        this.swipeManager?.destroy();
         this.chatElement?.removeEventListener('scroll', this.chatScrollHandler);
         const ctx = context();
         for (const [name, cb] of this.listeners) ctx.eventSource?.removeListener?.(name, cb);
@@ -524,7 +589,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.12.0)');
+        console.info(PREFIX, 'loaded (v1.13.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
