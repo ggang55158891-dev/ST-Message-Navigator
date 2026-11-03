@@ -76,7 +76,7 @@ export class FileActionUI {
     }
     openTrash(){return this.bin.open();}
     begin(kind,item){
-        if(this.busy || this.disposed || !this.isQuiet() || !['rename','delete'].includes(kind))
+        if(this.busy || this.bin.busy || this.disposed || !this.isQuiet() || !['rename','delete'].includes(kind))
             return false;
         const owner=this.library.owner;
         const ctx=owner.callbacks.context(),scope=owner.scope;
@@ -142,6 +142,19 @@ export class FileActionUI {
             if(before.chat!==pending.chat || before.chatId!==pending.activeId ||
                 buildingScope(before)!==pending.scope)
                 throw new Error('원본 보관 중 채팅이 변경되어 작업을 취소했습니다.');
+            // Durable write-ahead phase marker: on a browser crash, the
+            // vault can distinguish "prepared" from an attempted mutation,
+            // and retain the intended rename target for read-only diagnosis.
+            await this.vault.mark(archived.id,'committing',
+                pending.kind==='rename'?newName:null);
+            const checked=await this.vault.read(archived.id);
+            if(checked.meta.state!=='committing' ||
+                (pending.kind==='rename' && checked.meta.resultName!==newName))
+                throw new Error('복구 작업 기록 재검증에 실패해 변경을 중단했습니다.');
+            if(this.cancelled || this.disposed || !this.isQuiet() ||
+                owner.callbacks.context().chat!==pending.chat ||
+                owner.callbacks.context().chatId!==pending.activeId)
+                throw new Error('작업 도중 화면이 변경되어 파일 수정을 중단했습니다.');
             this.help.textContent='보관 확인 완료. SillyTavern 파일 작업을 실행하고 있습니다…';
             const outcome=pending.kind==='rename'
                 ?await renameInactiveChat({
