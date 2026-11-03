@@ -1,5 +1,6 @@
 /** SillyTavern adapter: library metadata only, lazily accessed on user action. */
-import { changeLibrary, moveLibraryReference, forgetLibraryReference } from './library-operations.js';
+import { changeLibrary, moveLibraryReference, forgetLibraryReference, bulkChangeLibrary } from './library-operations.js';
+import { buildingScope } from './building-data.js';
 import {
     LIBRARY_KEY, validateLibrary, mergeLibrary, librarySummary,
 } from './library-data.js';
@@ -50,6 +51,30 @@ export class LibraryRepository {
             throw error;
         }
         return next;
+    }
+
+    /**
+     * One user-confirmed, current-scope metadata mutation and one settings
+     * save request, regardless of the number of selected chats. No JSONL API.
+     */
+    bulkUpdate({scope,ids,availableIds,operation,value=null}){
+        const ctx=this.settingsRoot();
+        if(buildingScope(ctx)!==scope)
+            throw new Error('캐릭터/그룹이 변경되어 일괄 정리를 중단했습니다.');
+        if(typeof ctx.saveSettingsDebounced!=='function')
+            throw new Error('SillyTavern 설정 저장 함수를 사용할 수 없습니다.');
+        const settings=ctx.extensionSettings;
+        const previous=settings[LIBRARY_KEY];
+        const result=bulkChangeLibrary(previous,{scope,ids,availableIds,operation,value});
+        if(!result.changed)return {...result,saved:false};
+        settings[LIBRARY_KEY]=result.library;
+        try {ctx.saveSettingsDebounced();}
+        catch(error){
+            if(previous===undefined)delete settings[LIBRARY_KEY];
+            else settings[LIBRARY_KEY]=previous;
+            throw error;
+        }
+        return {...result,saved:true};
     }
 
     /**
