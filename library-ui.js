@@ -223,6 +223,7 @@ export class LibraryLobby {
             return;
         }
         const fragment = document.createDocumentFragment();
+        const quiet = owner.view.root.dataset.elevatorTheme === 'quiet';
         const selected = cleanChatId(owner.callbacks.context().chatId);
         for (const item of found.slice(0,this.visible)) {
             const current = selected === item.id;
@@ -232,14 +233,16 @@ export class LibraryLobby {
             const enter = button('', 'stmn-building-card' + (current ? ' stmn-building-current' : ''),
                 () => void owner.enter(item));
             enter.disabled = owner.busy;
-            enter.setAttribute('aria-label', item.displayName + (current ? ' · 현재 채팅' : ' · 채팅 열기'));
+            enter.setAttribute('aria-label', (quiet ? item.name : item.displayName) +
+                (current ? ' · 현재 채팅' : ' · 채팅 열기'));
             const facade = make('span','stmn-building-facade');
             facade.setAttribute('aria-hidden','true');
             const info = make('span','stmn-building-card-body');
-            info.append(make('strong','stmn-building-card-title',item.displayName));
+            info.append(make('strong','stmn-building-card-title',quiet ? item.name : item.displayName));
+            if (quiet && item.description) info.append(make('span','stmn-quiet-chat-description',item.description));
             const badges = [
                 current ? '현재 채팅' : null,
-                item.alias ? '원본: ' + item.name : null,
+                item.alias ? (quiet ? '기존 별명: ' + item.alias : '원본: ' + item.name) : null,
                 item.folderName || null,
                 Number.isInteger(item.count) ? item.count + '개 메시지' : null,
                 item.lastActivity ? new Date(item.lastActivity).toLocaleDateString() : null,
@@ -254,6 +257,75 @@ export class LibraryLobby {
             favorite.title = item.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가';
             favorite.setAttribute('aria-label', item.displayName+' '+favorite.title);
             line.append(enter,favorite);
+            // Quiet uses a quick-description editor without modifying the old
+            // alias. It is intentionally separate from the D-stage alias form.
+            const showDescriptionEditor = () => {
+                const old = wrapper.querySelector('.stmn-quiet-description-editor');
+                if (old) { old.remove(); return; }
+                const form = make('form','stmn-quiet-description-editor');
+                const input = make('input','stmn-quiet-description-input');
+                input.type = 'text';
+                input.maxLength = 240;
+                input.placeholder = '채팅 설명 (최대 240자, 비워두면 삭제)';
+                input.value = item.description || '';
+                input.setAttribute('aria-label', item.name + ' 채팅 설명');
+                const save = button('저장', 'stmn-library-small', () => {});
+                save.type = 'submit';
+                const cancel = button('취소','stmn-library-small',()=>form.remove());
+                const feedback = make('span','stmn-library-error');
+                form.append(input,save,cancel,feedback);
+                form.addEventListener('submit',event => {
+                    event.preventDefault();
+                    try {
+                        this.mutate({kind:'chat',type:'description',
+                            reference:item.reference,value:input.value.trim()});
+                    } catch (error) {
+                        feedback.textContent = error?.message || '설명을 저장하지 못했습니다.';
+                    }
+                });
+                wrapper.insertBefore(form,wrapper.querySelector('.stmn-library-details'));
+                input.focus();
+                input.select();
+            };
+            if (quiet) {
+                const editDescription = button('✎','stmn-quiet-chat-action', showDescriptionEditor);
+                editDescription.title = '채팅 설명 수정';
+                editDescription.setAttribute('aria-label',item.name+' 설명 수정');
+                const peek = make('details','stmn-quiet-item-preview');
+                const peekSummary = make('summary','','◉');
+                peekSummary.title = '채팅 정보 보기 · 메시지 본문 미리보기는 다음 단계';
+                peekSummary.setAttribute('aria-label',item.name+' 채팅 정보 보기');
+                const peekBody = make('div','stmn-quiet-item-preview-body');
+                peekBody.append(make('strong','',item.name));
+                peekBody.append(make('p','',item.description || '채팅 설명 없음'));
+                if (item.folderName) peekBody.append(make('small','', '폴더: '+item.folderName));
+                if (item.tagNames.length) peekBody.append(make('small','', '태그: '+item.tagNames.join(', ')));
+                if (Number.isInteger(item.count)) peekBody.append(make('small','', '메시지 '+item.count+'개'));
+                peekBody.append(make('small','', '전체 메시지 미리보기는 Q-04에서 추가됩니다.'));
+                peek.append(peekSummary,peekBody);
+                const menu = make('details','stmn-quiet-item-menu');
+                const summary = make('summary','','···');
+                summary.title = '채팅 관리 메뉴';
+                summary.setAttribute('aria-label',item.name+' 관리 메뉴');
+                const menuBody = make('div','stmn-quiet-item-menu-body');
+                const infoEdit = button('정보 편집 · 채팅 설명', 'stmn-quiet-menu-item', () => {
+                    menu.open = false; showDescriptionEditor();
+                });
+                const category = button('분류 · 폴더 / 태그', 'stmn-quiet-menu-item', () => {
+                    menu.open = false;
+                    const details = wrapper.querySelector('.stmn-library-details');
+                    if (details) details.open = true;
+                });
+                const legacy = button('기존 별명 관리', 'stmn-quiet-menu-item', () => {
+                    menu.open = false;
+                    const details = wrapper.querySelector('.stmn-library-details');
+                    if (details) details.open = true;
+                });
+                menuBody.append(infoEdit,category,legacy,
+                    make('div','stmn-quiet-menu-label','파일 관리 · 실제 파일 조작은 Q-07에서 추가'));
+                menu.append(summary,menuBody);
+                line.append(editDescription,peek,menu);
+            }
             wrapper.append(line);
             const details = make('details','stmn-library-details');
             details.append(make('summary','', '관리 · 별명 / 폴더 / 태그'));
