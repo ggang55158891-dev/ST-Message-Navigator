@@ -160,7 +160,7 @@ export class RecoveryVault {
         }finally{db.close();}
     }
     async mark(id,state,resultName=undefined){
-        if(!['committing','deleted','renamed','uncertain','restored'].includes(state))
+        if(!['committing','restoring','deleted','renamed','uncertain','restored'].includes(state))
             throw new Error('보관함 상태 변경이 올바르지 않습니다.');
         const db=await this.open();
         try{
@@ -176,6 +176,9 @@ export class RecoveryVault {
             if(state==='committing' && previous.action==='rename' &&
                 (typeof resultName!=='string' || !resultName || resultName.length>120))
                 throw new Error('이름 변경 대상을 보관함에 기록할 수 없습니다.');
+            if(state==='restoring' && (previous.state==='restoring' ||
+                typeof resultName!=='string' || !resultName || resultName.length>120))
+                throw new Error('복구 중이던 작업을 다시 시작할 수 없습니다. 서버 상태를 먼저 확인해 주세요.');
             store.put({...previous,state,
                 resultName:resultName===undefined?previous.resultName:resultName});
             await done;
