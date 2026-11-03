@@ -58,11 +58,15 @@ async function startServer() {
     return { server, baseURL: 'http://127.0.0.1:' + server.address().port };
 }
 
-async function setupPage(browser, baseURL, messageCount = 23, size = { width: 1280, height: 800 }) {
+async function setupPage(browser, baseURL, messageCount = 23, size = { width: 1280, height: 800 }, integrated = false) {
     const page = await browser.newPage({ viewport: size });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(baseURL);
+    if (integrated) {
+        await bootSettingsApp(page);
+        return { page, errors };
+    }
     await page.evaluate(async count => {
         const { NavigatorView } = await import('/ui.js');
         const makeMessage = i => ({
@@ -115,6 +119,48 @@ async function setupPage(browser, baseURL, messageCount = 23, size = { width: 12
     return { page, errors };
 }
 
+/**
+ * Boot the actual extension entrypoint with a small simulated ST context.
+ * Unlike view-only smoke tests, this covers index.js changeSetting validation
+ * and the real "엘리베이터 외형" select event through persistence.
+ */
+async function bootSettingsApp(page) {
+    await page.evaluate(async () => {
+        const { SETTINGS_KEY } = await import('/model.js');
+        const saved = JSON.parse(sessionStorage.getItem('stmn-test-theme') || '{}');
+        const context = {
+            extensionSettings: {
+                [SETTINGS_KEY]: saved,
+                unrelated_extension: { keep: true },
+            },
+            chatId: 'chat-settings-test',
+            characterId: 0,
+            characters: [{ name: 'Character', avatar: 'none' }],
+            groupId: null,
+            groups: [],
+            chatMetadata: {},
+            chat: [
+                { name: 'User', is_user: true, mes: 'Theme test one' },
+                { name: 'Character', is_user: false, mes: 'Theme test two' },
+            ],
+            eventTypes: {},
+            eventSource: {
+                on() {},
+                removeListener() {},
+            },
+            saveSettingsDebounced() {
+                window.__themeSaveCount = (window.__themeSaveCount || 0) + 1;
+                sessionStorage.setItem('stmn-test-theme', JSON.stringify(this.extensionSettings[SETTINGS_KEY]));
+            },
+        };
+        window.SillyTavern = { getContext: () => context };
+        window.__themeAppContext = context;
+        window.__themeSaveCount = 0;
+        await import('/index.js');
+    });
+    await page.locator('#stmn-elevator-theme').waitFor({ state: 'attached' });
+}
+
 async function run() {
     const { server, baseURL } = await startServer();
     let browser;
@@ -125,8 +171,8 @@ async function run() {
         let page;
         let errors = [];
         try {
-            const result = await fn(async (messageCount, size) => {
-                const setup = await setupPage(browser, baseURL, messageCount, size);
+            const result = await fn(async (messageCount, size, integrated = false) => {
+                const setup = await setupPage(browser, baseURL, messageCount, size, integrated);
                 page = setup.page;
                 errors = setup.errors;
                 return page;
@@ -184,6 +230,42 @@ async function run() {
             await page.waitForFunction(() => window.__stmnContext.chatId === 'chat-b');
             assert.equal(await page.getByRole('tab', { name: '층 안내' }).getAttribute('aria-selected'), 'true');
             assert.match(await page.locator('.stmn-elevator-building').innerText(), /chat-b/);
+        });
+
+        await check('actual extension settings select applies Quiet, persists, and survives reload', async setup => {
+            const page = await setup(2, undefined, true);
+            const themeSelect = page.locator('#stmn-elevator-theme');
+            await page.locator('#stmn-settings > details > summary').click();
+            assert.equal(await themeSelect.inputValue(), 'classic');
+            await themeSelect.selectOption('quiet');
+            const selected = await page.evaluate(() => {
+                const root = document.getElementById('stmn-root');
+                const ctx = window.__themeAppContext;
+                return {
+                    theme: root.dataset.elevatorTheme,
+                    stored: ctx.extensionSettings.st_message_navigator_v1?.elevatorTheme,
+                    saveCount: window.__themeSaveCount,
+                    other: ctx.extensionSettings.unrelated_extension.keep,
+                    panelBg: getComputedStyle(document.querySelector('.stmn-outline')).backgroundColor,
+                };
+            });
+            assert.equal(selected.theme, 'quiet', 'Live setting handler must accept quiet');
+            assert.equal(selected.stored, 'quiet', 'Live setting handler must update managed settings');
+            assert.ok(selected.saveCount >= 1, 'Theme switch must request persistence');
+            assert.equal(selected.other, true, 'Other extension data must remain untouched');
+            assert.equal(selected.panelBg, 'rgb(253, 253, 252)', 'Quiet style should be visible');
+
+            await page.locator('[data-action="outline"]').click();
+            assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(), true);
+            await page.reload();
+            await bootSettingsApp(page);
+            await page.locator('#stmn-settings > details > summary').click();
+            assert.equal(await page.locator('#stmn-elevator-theme').inputValue(), 'quiet',
+                'Saved Quiet preference should be restored on startup');
+            assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'), 'quiet');
+            await page.locator('#stmn-elevator-theme').selectOption('classic');
+            assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'), 'classic');
+            assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(), false);
         });
 
         await check('Quiet opt-in shell keeps search, grouping and chat switching functional', async setup => {
