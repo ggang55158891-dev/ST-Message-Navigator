@@ -91,6 +91,7 @@ export class RecoveryBinUI {
                 card.append(el('strong','',meta.name));
                 const state={
                     prepared:'원본 보관 완료 · 작업 미시작',committing:'작업 도중 중단 또는 확인 대기',
+                    restoring:'복구 도중 중단 또는 확인 대기',
                     uncertain:'결과 확인 필요',deleted:'삭제 후 보관',
                     renamed:'이름 변경 전 보관',restored:'복구 기록',
                 }[meta.state]||meta.state;
@@ -101,12 +102,14 @@ export class RecoveryBinUI {
                 card.append(sub);
                 const buttons=el('div','stmn-bin-item-actions');
                 const restore=btn('복구본 만들기',()=>void this.restore(meta.id));
-                restore.disabled=meta.scope!==currentScope;
-                restore.title=restore.disabled?'복구하려면 원래 캐릭터 또는 그룹을 선택해 주세요.':
+                restore.disabled=meta.scope!==currentScope || meta.state==='restoring';
+                restore.title=meta.state==='restoring'
+                    ?'복구가 중단된 기록입니다. 서버 상태 확인과 원본 ZIP을 먼저 이용해 주세요.'
+                    :restore.disabled?'복구하려면 원래 캐릭터 또는 그룹을 선택해 주세요.':
                     '원래 채팅을 덮어쓰지 않고 별도의 새 채팅으로 복구합니다.';
                 const exportButton=btn('원본 ZIP',()=>void this.download(meta.id));
                 const remove=btn('보관본 삭제',()=>void this.remove(meta.id,meta.name));
-                if(['prepared','committing','uncertain'].includes(meta.state)){
+                if(['prepared','committing','uncertain','restoring'].includes(meta.state)){
                     const audit=btn('서버 상태 확인',()=>void this.inspect(meta.id));
                     audit.disabled=meta.scope!==currentScope;
                     audit.title='읽기 전용으로 원본/변경 대상 파일을 검사합니다.';
@@ -133,9 +136,9 @@ export class RecoveryBinUI {
     }
     async inspect(id){
         await this.withBusy(async()=>{
-            const {meta}=await this.actions.vault.read(id);
+            const {meta,raw}=await this.actions.vault.read(id);
             const result=await inspectArchiveStatus({
-                context:this.owner.callbacks.context,record:meta,
+                context:this.owner.callbacks.context,record:meta,raw,
             });
             this.status.textContent='서버 파일 검사: '+result.message+
                 ' 이 확인은 서버 파일이나 보관 기록을 수정하지 않습니다.';
