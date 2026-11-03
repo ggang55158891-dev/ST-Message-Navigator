@@ -108,6 +108,45 @@ export async function confirmActionResult({
     return true;
 }
 
+/**
+ * Read-only diagnostic for an interrupted or ambiguous operation. This NEVER
+ * changes the server, IndexedDB, or group/library membership. Absence of a
+ * file alone cannot prove which actor removed it.
+ */
+export async function inspectArchiveStatus({context,record,fetcher=fetch}){
+    if(!record || !['rename','delete'].includes(record.action))
+        throw new Error('검사할 보관 기록이 올바르지 않습니다.');
+    const before=context();
+    if(buildingScope(before)!==record.scope ||
+        (record.isGroup && String(before.groupId)!==String(record.groupId)))
+        throw new Error('원래 캐릭터 또는 그룹을 선택한 뒤 상태를 검사해 주세요.');
+    const source={isGroup:record.isGroup,avatar:record.avatar,id:record.name};
+    const original=await getRaw(before,source,fetcher);
+    const originalMatches=original!==null && await hashJsonl(original)===record.hash;
+    let target=null,targetMatches=false;
+    if(record.action==='rename' && record.resultName &&
+        record.resultName!==record.name){
+        target=await getRaw(before,{...source,id:record.resultName},fetcher);
+        targetMatches=target!==null && await hashJsonl(target)===record.hash;
+    }
+    const after=context();
+    if(buildingScope(after)!==record.scope ||
+       (record.isGroup && String(after.groupId)!==String(record.groupId)))
+        throw new Error('검사 중 다른 캐릭터 또는 그룹으로 전환되어 판정을 중단했습니다.');
+    if(record.action==='delete'){
+        if(original===null)
+            return {code:'missing',message:'원본 파일을 찾지 못했습니다. 삭제되었을 가능성이 있지만 그룹 연결 정보와 다른 작업의 영향도 확인해 주세요.'};
+        if(originalMatches)
+            return {code:'intact',message:'서버의 원본 파일이 보관본과 일치합니다. 삭제가 완료되지는 않았습니다.'};
+        return {code:'changed',message:'원본 파일이 남아 있지만 자동 보관본과 내용이 다릅니다. 수동 점검이 필요합니다.'};
+    }
+    if(original===null && targetMatches)
+        return {code:'renamed',message:'이전 이름의 파일은 없고 새 이름의 파일 내용이 보관본과 일치합니다. 그룹 연결 및 관리 정보도 확인해 주세요.'};
+    if(originalMatches && target===null)
+        return {code:'intact',message:'원본 파일이 보관본과 일치하며 새 이름의 파일은 없습니다. 이름 변경이 완료되지 않았습니다.'};
+    return {code:'uncertain',message:'원본/변경 대상의 존재 또는 내용이 예상과 다릅니다. 두 파일을 직접 확인하고 복구 보관본을 유지해 주세요.'};
+}
+
 export function recoveredFilename(original,now=Date.now(),random=()=>{
     const bytes=crypto.getRandomValues(new Uint8Array(4));
     return [...bytes].map(x=>x.toString(16).padStart(2,'0')).join('');
