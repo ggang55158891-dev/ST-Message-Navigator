@@ -61,6 +61,7 @@ export class QuietShell {
             action('화면·조작 설정', '화면·조작 설정', () => this.openSettings('appearance'), 'stmn-quiet-menu-item'),
             action('백업·복원', '백업·복원', () => this.openSettings('backup'), 'stmn-quiet-menu-item'),
             action('진단·데이터 점검', '진단·데이터 점검', () => this.openSettings('diagnostics'), 'stmn-quiet-menu-item'),
+            action('복구 보관함', '복구 보관함', () => void this.owner.libraryUI.fileActions.openTrash(), 'stmn-quiet-menu-item'),
         );
         this.globalMenu.append(globalSummary, globalItems);
         this.headerActions.append(this.folderButton, this.searchButton, this.globalMenu);
