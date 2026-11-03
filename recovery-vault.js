@@ -85,9 +85,15 @@ export class RecoveryVault {
         if(!TRASH_RETENTION.includes(days))throw new Error('보관 기간 설정이 올바르지 않습니다.');
         const db=await this.open();
         try{
-            const tx=db.transaction(['prefs'],'readwrite');
+            const tx=db.transaction(['prefs','entries'],'readwrite');
             const done=completed(tx);
             tx.objectStore('prefs').put(days,'retention');
+            const entries=tx.objectStore('entries');
+            const all=await request(entries.getAll());
+            for(const meta of all) {
+                if(!validEntry(meta))continue;
+                entries.put({...meta,expiresAt:expiryFor(meta.createdAt,days)});
+            }
             await done;
         }finally{db.close();}
     }
