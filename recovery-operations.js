@@ -124,7 +124,7 @@ export async function restoreFromVault({
     const {meta,raw}=await vault.read(archiveId);
     const ctx=context();
     if(buildingScope(ctx)!==meta.scope ||
-        (meta.isGroup && String(ctx.groupId)!==meta.groupId))
+        (meta.isGroup && String(ctx.groupId)!==String(meta.groupId)))
         throw new Error('복구할 채팅의 원래 캐릭터 또는 그룹을 먼저 선택해 주세요.');
     const startChat=ctx.chat,activeChatId=ctx.chatId;
     const latest=()=>{
