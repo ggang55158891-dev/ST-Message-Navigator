@@ -246,10 +246,15 @@ export class ChatSearchUI{
                     else truncated++;
                 }
                 processed++;
-                this.status.textContent=(from+processed)+' / '+items.length+
-                    '개 채팅 확인 · 결과 '+this.results.length+'개';
-                // Yield to the browser even when metadata-only scans are cheap.
-                if(processed%3===0)await new Promise(resolve=>setTimeout(resolve,0));
+                if(controller.signal.aborted || serial!==this.serial || !this.isValid(scope))
+                    throw new DOMException('검색 취소','AbortError');
+                // Throttle status writes and yield between small groups to keep
+                // large metadata-only searches responsive to UI interactions.
+                if(processed%3===0 || processed===candidates.length){
+                    this.status.textContent=(from+processed)+' / '+items.length+
+                        '개 채팅 확인 · 결과 '+this.results.length+'개';
+                    await new Promise(resolve=>setTimeout(resolve,0));
+                }
             }
             if(serial!==this.serial || !this.isValid(scope))return false;
             this.offset=scanMessages?from+candidates.length:items.length;
