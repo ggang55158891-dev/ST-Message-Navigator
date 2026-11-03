@@ -430,6 +430,93 @@ async function run() {
             assert.equal(await page.locator('.stmn-outline-jumps').isVisible(), false);
         });
 
+        await check('Q05 previous restarts current message before going back; next on last goes bottom; no white outline', async setup => {
+            const page=await setup(6);
+            await page.evaluate(async()=>{
+                window.__stmnView.destroy();
+                const host=document.getElementById('chat');
+                host.replaceChildren();
+                const heights=[260,260,950,260,260,950];
+                for(let i=0;i<6;i++) {
+                    const row=document.createElement('div');
+                    row.className='mes';row.setAttribute('mesid',String(i));
+                    row.style.height=heights[i]+'px';
+                    row.textContent='Message #'+i;
+                    host.append(row);
+                }
+                const ctx=window.__stmnContext;
+                ctx.chatId='q05-chat';
+                ctx.chat=Array.from({length:6},(_,i)=>({
+                    name:'User',is_user:true,mes:'Text #'+i,
+                }));
+                ctx.extensionSettings={};
+                ctx.eventTypes={};
+                ctx.eventSource={on(){},removeListener(){}};
+                ctx.saveSettingsDebounced=()=>{};
+                window.SillyTavern={getContext:()=>ctx};
+                await import('/index.js');
+            });
+            const previous=page.locator('[data-action="previous"]');
+            const next=page.locator('[data-action="next"]');
+            const last=page.locator('[data-action="last"]');
+            await previous.waitFor({state:'visible'});
+            // Scroll well inside #2 (index 2), rather than its first paragraph.
+            await page.evaluate(()=>document.getElementById('chat').scrollTop=935);
+            await page.waitForFunction(()=>Math.abs(document.getElementById('chat').scrollTop-935)<3);
+            await previous.click();
+            const restarted=await page.evaluate(()=>({
+                top:document.getElementById('chat').scrollTop,
+                marker:document.querySelectorAll('#chat .stmn-jump-target').length,
+            }));
+            assert.ok(restarted.top>460 && restarted.top<550,
+                'First previous returns to message #2 start, not #1: '+JSON.stringify(restarted));
+            assert.equal(restarted.marker,0,'The navigation must not decorate message DOM with a white outline');
+            await previous.click();
+            const older=await page.evaluate(()=>document.getElementById('chat').scrollTop);
+            assert.ok(older>210 && older<290,
+                'Second previous should go to message #1 (not #0): '+older);
+
+            // If the user scrolls back into #2, its own start is offered again.
+            await page.evaluate(()=>document.getElementById('chat').scrollTop=900);
+            await page.waitForFunction(()=>Math.abs(document.getElementById('chat').scrollTop-900)<3);
+            await previous.click();
+            const again=await page.evaluate(()=>document.getElementById('chat').scrollTop);
+            assert.ok(again>460 && again<550,'Manual scrolling resets the start landing: '+again);
+
+            // At #0, "previous" is still available while the user is reading
+            // halfway through that message, then disables after returning up.
+            await page.evaluate(()=>document.getElementById('chat').scrollTop=120);
+            await page.waitForFunction(()=>Math.abs(document.getElementById('chat').scrollTop-120)<3);
+            await previous.click();
+            const first=await page.evaluate(()=>document.getElementById('chat').scrollTop);
+            assert.ok(first<=3,'First message should return to the actual chat start');
+            assert.equal(await previous.isEnabled(),false);
+
+            // "Last" lands on #5 start; "next" from there goes to chat bottom.
+            await last.click();
+            const atLast=await page.evaluate(()=>({
+                top:document.getElementById('chat').scrollTop,
+                max:document.getElementById('chat').scrollHeight-document.getElementById('chat').clientHeight,
+                outline:getComputedStyle(document.querySelector('#chat > .mes[mesid="5"]')).outlineStyle,
+                marker:document.querySelectorAll('#chat .stmn-jump-target').length,
+            }));
+            assert.ok(atLast.max-atLast.top>100,
+                'Last press should land at last message start: '+JSON.stringify(atLast));
+            assert.equal(atLast.outline,'none','No extension-generated focus box around last message');
+            assert.equal(atLast.marker,0);
+            assert.equal(await next.isEnabled(),true,
+                'Next remains available when the current message is the last but bottom is further');
+            await next.click();
+            const atBottom=await page.evaluate(()=>({
+                top:document.getElementById('chat').scrollTop,
+                max:document.getElementById('chat').scrollHeight-document.getElementById('chat').clientHeight,
+            }));
+            assert.ok(Math.abs(atBottom.top-atBottom.max)<=3,'Next reaches the actual bottom');
+            assert.equal(await next.isEnabled(),false,
+                'Next disables when no additional scroll or message is possible');
+            assert.equal(await page.locator('#chat > .mes.stmn-jump-target').count(),0);
+        });
+
         await check('last button jumps to last message start, then bottom; manual scrolling resets', async setup => {
             const page = await setup(6);
             await page.evaluate(async () => {
