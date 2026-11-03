@@ -1,5 +1,5 @@
 /** D-stage pure library edits. No browser state and no SillyTavern chat writes. */
-import { chatReference, emptyRecord, validateLibrary } from './library-data.js';
+import { chatReference, emptyRecord, validateLibrary, MAX_CHAT_DESCRIPTION } from './library-data.js';
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const validName = (name, max = 80) =>
@@ -53,6 +53,13 @@ export function changeLibrary(existing, action) {
                     action.value.length > 120) throw new Error('별명은 최대 120자까지 입력할 수 있습니다.');
                 record.alias = action.value;
                 break;
+            case 'description':
+                if (typeof action.value !== 'string' || action.value.trim() !== action.value ||
+                    action.value.length > MAX_CHAT_DESCRIPTION || /[\u0000-\u001f\u007f]/.test(action.value)) {
+                    throw new Error('채팅 설명은 최대 240자이며 줄바꿈과 제어문자를 포함할 수 없습니다.');
+                }
+                record.description = action.value;
+                break;
             case 'favorite':
                 if (typeof action.value !== 'boolean') throw new Error('즐겨찾기 상태가 유효하지 않습니다.');
                 record.favorite = action.value;
@@ -96,10 +103,10 @@ export function selectLibraryChats(buildings, scope, library, {
         const tagNames = record.tagIds.map(id => tagMap.get(id) || '').filter(Boolean);
         if (view === 'favorites' && !record.favorite) continue;
         if (view === 'folders' && record.folderId !== (folderId || null)) continue;
-        const text = [building.name, building.id, record.alias, folderName, ...tagNames]
+        const text = [building.name, building.id, record.alias, record.description, folderName, ...tagNames]
             .join(' ').toLocaleLowerCase();
         if (search && !text.includes(search)) continue;
-        list.push({ ...building, reference, alias: record.alias, favorite: record.favorite,
+        list.push({ ...building, reference, alias: record.alias, description: record.description, favorite: record.favorite,
             folderId: record.folderId, folderName, tagIds: record.tagIds,
             tagNames, displayName: record.alias || building.name,
             createdAt: record.createdAt ? Date.parse(record.createdAt) || 0 : 0 });
