@@ -127,3 +127,51 @@ export function assignCustomTitle(chat, metadata, index, title, idFactory = make
     message[MESSAGE_KEY] = id;
     store.titles[id] = clean;
 }
+
+
+/** Q-02 message bookmarks are kept alongside outline titles in chat metadata.
+ * Stored by stable per-message ID, not by position (which changes after edits).
+ * They never modify swipe text, extra metadata, or navigation titles. */
+export function isMessageBookmarked(message, metadata) {
+    const id = message?.[MESSAGE_KEY];
+    return typeof id === 'string' &&
+        Object.prototype.hasOwnProperty.call(metadata?.[DATA_KEY]?.bookmarks || {}, id) &&
+        metadata[DATA_KEY].bookmarks[id] === true;
+}
+
+export function setMessageBookmark(chat, metadata, index, value, idFactory = makeId) {
+    if (!Array.isArray(chat) || !chat[index] || !metadata || typeof metadata !== 'object' ||
+        typeof value !== 'boolean') throw new Error('메시지 북마크를 변경할 수 없습니다.');
+    const message = chat[index];
+    if (isMessageBookmarked(message, metadata) === value) return false;
+    const previous = message[MESSAGE_KEY];
+    const reserved = ['__proto__','prototype','constructor'];
+    const valid = typeof previous === 'string' && previous.length > 0 &&
+        previous.length <= 200 && !reserved.includes(previous);
+    const unique = valid && !chat.some((m,i) => i !== index && m?.[MESSAGE_KEY] === previous);
+    if (!value) {
+        if (unique && metadata?.[DATA_KEY]?.bookmarks) delete metadata[DATA_KEY].bookmarks[previous];
+        return true;
+    }
+    let id = unique ? previous : null;
+    if (!id) {
+        for (let attempt = 0; attempt < 12; attempt++) {
+            const candidate = idFactory();
+            if (typeof candidate === 'string' && candidate.length > 0 && candidate.length <= 200 &&
+                !reserved.includes(candidate) && !chat.some(m => m?.[MESSAGE_KEY] === candidate)) {
+                id = candidate;
+                break;
+            }
+        }
+    }
+    if (!id) throw new Error('중복되지 않는 메시지 ID를 발급할 수 없습니다.');
+    if (!metadata[DATA_KEY] || typeof metadata[DATA_KEY] !== 'object' ||
+        Array.isArray(metadata[DATA_KEY])) metadata[DATA_KEY] = { schema: 1, titles: Object.create(null) };
+    const store = metadata[DATA_KEY];
+    if (!store.bookmarks || typeof store.bookmarks !== 'object' ||
+        Array.isArray(store.bookmarks)) store.bookmarks = Object.create(null);
+    // Duplicate message IDs are never allowed to share bookmark ownership.
+    message[MESSAGE_KEY] = id;
+    store.bookmarks[id] = true;
+    return true;
+}
