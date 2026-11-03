@@ -467,9 +467,13 @@ async function run() {
             assert.equal(await page.locator('.stmn-batch-checkbox:checked').count(),1);
             await page.getByRole('checkbox',{name:'건물 A 선택'}).check();
             assert.equal(await page.locator('.stmn-batch-count').textContent(),'2개 선택');
-            const downloadPromise=page.waitForEvent('download');
+            const downloadPromise=page.waitForEvent('download',{timeout:5000}).catch(()=>null);
             await page.getByRole('button',{name:'원본 백업 ZIP'}).click();
+            await page.waitForTimeout(500);
+            const status=await page.locator('.stmn-batch-status').textContent();
             const download=await downloadPromise;
+            assert.ok(download,'ZIP 다운로드가 시작되지 않았습니다. UI 상태: '+status+
+                ' / API 호출: '+JSON.stringify(calls));
             assert.ok(download.suggestedFilename().endsWith('.zip'));
             const file=await readFile(await download.path());
             assert.equal(file.readUInt32LE(0),0x04034b50);
