@@ -589,7 +589,9 @@ async function run() {
             });
             await page.locator('[data-action="outline"]').click();
             await page.locator('.stmn-quiet-bookmark').first().click();
-            assert.equal(await page.locator('.stmn-quiet-bookmark').first().getAttribute('aria-pressed'),'true');
+            await page.waitForFunction(() =>
+                document.querySelector('.stmn-quiet-bookmark')?.getAttribute('aria-pressed') === 'true',
+                { timeout: 2000 });
             await page.locator('.stmn-row').first().getByRole('button',{name:/내용 미리보기/}).click();
             assert.equal(await page.locator('.stmn-quiet-message-preview').isVisible(),true);
             await page.getByRole('button',{name:'미리보기 닫기'}).click();
