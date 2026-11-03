@@ -1427,3 +1427,50 @@
 @media(prefers-reduced-motion:reduce) {
     .stmn-swipe-overlay * {transition:none!important;animation:none!important}
 }
+
+
+/* Q-07A: only visible after the user explicitly enters file selection mode. */
+#stmn-root .stmn-batch-toolbar[hidden] {display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-toolbar:not([hidden]) {
+    display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+    padding:11px 10px;margin:2px 0 10px;
+    border:1px solid #e9ece9;border-radius:12px;
+    background:#f6f7f5;color:#47534b;
+    font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-count {
+    font-size:11px;font-weight:650;margin-right:auto;white-space:nowrap;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-action,
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-export {
+    display:inline-flex;justify-content:center;align-items:center;
+    padding:6px 9px;
+    border:1px solid #e0e4df;border-radius:9px;
+    background:#fff;color:#505f53;
+    font:inherit;font-size:10px;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-action:disabled,
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-export:disabled {
+    opacity:.42;cursor:default;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-export {
+    background:#39483d;color:white;border-color:#39483d;
+    font-weight:650;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-status {
+    flex-basis:100%;color:#7a877d;line-height:1.6;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-status:empty {display:none}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-checkbox {
+    appearance:auto;
+    flex:0 0 16px;width:16px;height:16px;
+    accent-color:#576e5b;cursor:pointer;
+    margin:0 1px 0 9px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-checkbox:focus-visible {
+    outline:2px solid #526859;outline-offset:2px;
+}
+@media(max-width:520px){
+    #stmn-root[data-elevator-theme="quiet"] .stmn-batch-toolbar:not([hidden]){gap:6px;padding:8px}
+    #stmn-root[data-elevator-theme="quiet"] .stmn-batch-checkbox{margin-left:5px}
+}
