@@ -242,7 +242,7 @@ async function run() {
                 const ctx = window.__themeAppContext;
                 return {
                     theme: root.dataset.elevatorTheme,
-                    stored: ctx.extensionSettings.stmn_message_navigator?.elevatorTheme,
+                    stored: ctx.extensionSettings.st_message_navigator_v1?.elevatorTheme,
                     saveCount: window.__themeSaveCount,
                     other: ctx.extensionSettings.unrelated_extension.keep,
                     panelBg: getComputedStyle(document.querySelector('.stmn-outline')).backgroundColor,
