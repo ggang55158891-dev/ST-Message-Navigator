@@ -731,7 +731,7 @@ async function run() {
                 requests.push(data);
                 const messages=Array.from({length:260},(_,i)=>({
                     name:i%2?'Character':'User',is_user:i%2===0,
-                    mes:'메시지 '+i+' · '+(i===259?'끝'.repeat(600):'본문의 첫 문장입니다.'),
+                    mes:'메시지 '+i+' · '+(i===259?'끝'.repeat(800):'본문의 첫 문장입니다.'),
                     ...(i===3?{stmn_message_id_v1:'special-id'}:{}),
                 }));
                 await route.fulfill({status:200,contentType:'application/json',
