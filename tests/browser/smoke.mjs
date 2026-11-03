@@ -568,6 +568,13 @@ async function run() {
             assert.equal(archive.state,'uncertain','Uncertain deletion must keep a recovery copy');
             assert.ok(archive.raw.includes('"mes":"backup"'));
             assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+            await page.locator('.stmn-quiet-global summary').click();
+            await page.getByRole('button',{name:'복구 보관함'}).click();
+            await page.locator('.stmn-bin-entry').first().waitFor({state:'visible'});
+            assert.ok(await page.locator('.stmn-bin-entry').first().innerText().then(x=>x.includes('결과 확인 필요')));
+            await page.locator('.stmn-bin-entry').getByRole('button',{name:'서버 상태 확인'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-bin-status')?.textContent.includes('원본 파일'));
+            assert.equal(deletes,1,'read-only audit must never retry deletion');
         });
 
         await check('Q07C IndexedDB unavailable means file deletion is NEVER called',async setup=>{
