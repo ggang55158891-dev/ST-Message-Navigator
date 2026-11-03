@@ -511,6 +511,7 @@ async function run() {
             await page.locator('.stmn-quiet-global summary').click();
             await page.getByRole('button',{name:'복구 보관함'}).click();
             await page.locator('.stmn-recovery-bin').waitFor({state:'visible'});
+            await page.locator('.stmn-bin-entry').first().waitFor({state:'visible'});
             assert.equal(await page.locator('.stmn-bin-entry').count(),1);
             const vaultMeta=await page.evaluate(async()=>{
                 const mod=await import('/recovery-vault.js');
