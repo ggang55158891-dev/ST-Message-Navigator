@@ -72,7 +72,7 @@ export class FileActionUI {
     dismissOnNavigation(){
         if(this.busy){this.cancelled=true;return;}
         this.reset();
-        this.bin.close();
+        this.bin.close(true);
     }
     openTrash(){return this.bin.open();}
     begin(kind,item){
