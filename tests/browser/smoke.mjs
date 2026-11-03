@@ -519,6 +519,38 @@ async function run() {
                 'A single toolbar icon is mounted without duplicates');
         });
 
+        await check('Q06 failed metadata save rolls back swipe annotations and leaves other fields untouched', async setup => {
+            const page=await setup(2,undefined,true);
+            await page.evaluate(()=>{
+                const ctx=window.__themeAppContext;
+                ctx.chat[0].swipes=['원문 A','원문 B'];
+                ctx.chat[0].swipe_id=0;
+                ctx.chatMetadata={outside:{keep:'safe'}};
+                ctx.saveMetadata=async()=>{throw Error('저장 장치 오류');};
+                const row=document.createElement('div');
+                row.className='mes';
+                row.setAttribute('mesid','0');
+                row.innerHTML='<div class="mes_block"><div class="mes_buttons"></div><div class="mes_text">A</div></div>';
+                document.querySelector('#chat').append(row);
+            });
+            await page.getByRole('button',{name:'메시지 #0 스와이프 관리'}).click();
+            const dialog=page.locator('.stmn-swipe-dialog');
+            await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).click();
+            await page.waitForFunction(()=>
+                document.querySelector('.stmn-swipe-feedback')?.textContent.includes('저장 장치 오류'));
+            const data=await page.evaluate(()=>{
+                const ctx=window.__themeAppContext;
+                return {outside:ctx.chatMetadata.outside.keep,
+                    hasMarks:Object.prototype.hasOwnProperty.call(ctx.chatMetadata,'stmn_message_outline_v1'),
+                    hasId:Object.prototype.hasOwnProperty.call(ctx.chat[0],'stmn_message_id_v1'),
+                    bodies:ctx.chat[0].swipes.slice(),active:ctx.chat[0].swipe_id};
+            });
+            assert.deepEqual(data,{outside:'safe',hasMarks:false,hasId:false,bodies:['원문 A','원문 B'],active:0});
+            assert.equal(await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).getAttribute('aria-pressed'),
+                'false','Failed save must not make a favorite appear persisted');
+            await dialog.getByRole('button',{name:'스와이프 관리 닫기'}).click();
+        });
+
         await check('Q05 previous restarts current message before going back; next on last goes bottom; no white outline', async setup => {
             const page=await setup(6);
             await page.evaluate(async()=>{
