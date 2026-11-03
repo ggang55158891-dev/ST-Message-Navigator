@@ -457,12 +457,12 @@ export class LibraryLobby {
                     menu.open=false;
                     this.fileUI.enable(true,item);
                 });
-                const renameFile=button('파일 이름 변경 · 백업 후', 'stmn-quiet-menu-item',
+                const renameFile=button('파일 이름 변경', 'stmn-quiet-menu-item',
                     () => {
                         menu.open=false;
                         void this.fileActions.begin('rename',item);
                     });
-                const deleteFile=button('파일 삭제 · 백업 후', 'stmn-quiet-menu-item stmn-file-menu-danger',
+                const deleteFile=button('파일 삭제', 'stmn-quiet-menu-item stmn-file-menu-danger',
                     () => {
                         menu.open=false;
                         void this.fileActions.begin('delete',item);
