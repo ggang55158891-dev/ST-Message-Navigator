@@ -20,7 +20,7 @@ export const SETTINGS_FIELDS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
 const OPTIONS = Object.freeze({
     mode: ['visible', 'all'],
     side: ['left', 'right'],
-    elevatorTheme: ['classic', 'restricted', 'sky'],
+    elevatorTheme: ['classic', 'restricted', 'sky', 'quiet'],
     elevatorSky: ['auto', 'day', 'night'],
 });
 const BOOLEAN_FIELDS = ['showNavigationButtons', 'diagnosticsEnabled'];
