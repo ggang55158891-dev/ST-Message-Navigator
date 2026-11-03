@@ -728,6 +728,44 @@ async function run() {
             assert.deepEqual(writes,[]);
         });
 
+        await check('E03A 26 chats fetch exactly one bounded page until next click',async setup=>{
+            const page=await setup(3);
+            const fetched=[];
+            await page.route('**/api/chats/get',async route=>{
+                fetched.push(route.request().postDataJSON().file_name);
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify([{chat_metadata:{}},{mes:'없는 단어'}])});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.callbacks.listBuildings=async()=>({
+                    scope:'character:none',title:'Character',
+                    buildings:Array.from({length:26},(_,i)=>({
+                        id:i===0?'chat-a':'chat-'+i,
+                        name:'Chat '+i,lastActivity:1000-i,count:2,
+                    })),
+                });
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-library-card').first().waitFor();
+            await page.locator('.stmn-quiet-list-menu summary').click();
+            await page.getByRole('button',{name:'통합 검색 · 메시지 제목/본문'}).click();
+            await page.getByRole('searchbox',{name:'통합 검색어'}).fill('찾기');
+            assert.deepEqual(fetched,[],'opening and typing must not start a scan');
+            await page.getByRole('button',{name:'검색',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-status')?.textContent.includes('12 / 26'));
+            assert.equal(fetched.length,11,'page one includes in-memory active chat');
+            await page.getByRole('button',{name:'다음 12개 채팅 검색'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-status')?.textContent.includes('24 / 26'));
+            assert.equal(fetched.length,23);
+            await page.getByRole('button',{name:'다음 12개 채팅 검색'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-status')?.textContent.includes('26 / 26'));
+            assert.equal(fetched.length,25);
+            assert.equal(await page.getByRole('button',{name:'다음 12개 채팅 검색'}).isVisible(),false);
+        });
+
         await check('E03A changing tabs cancels in-flight read without stale results',async setup=>{
             const page=await setup(3);
             await page.route('**/api/chats/get',async route=>{
