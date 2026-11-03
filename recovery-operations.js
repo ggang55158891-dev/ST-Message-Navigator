@@ -169,7 +169,7 @@ export async function restoreFromVault({
 
     if(meta.isGroup){
         const current=latest();
-        const group=current.groups?.find(g=>String(g.id)===meta.groupId);
+        const group=current.groups?.find(g=>String(g.id)===String(meta.groupId));
         if(!group || !Array.isArray(group.chats))throw new Error('그룹 목록 갱신 전에 그룹이 변경됐습니다.');
         if(group.chats.includes(recovered))throw new Error('그룹에 같은 이름의 채팅이 이미 있습니다.');
         const next=[...group.chats,recovered];
