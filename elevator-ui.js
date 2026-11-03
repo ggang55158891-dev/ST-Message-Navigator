@@ -105,6 +105,8 @@ export class ElevatorPanel {
         const skyModes = ['auto', 'day', 'night'];
         this.view.root.dataset.elevatorTheme = ELEVATOR_THEMES.includes(theme) ? theme : 'classic';
         this.view.root.dataset.elevatorSky = skyModes.includes(skyMode) ? skyMode : 'auto';
+        if (this.view.root.dataset.elevatorTheme !== 'quiet') this.libraryUI.previewUI.closeDetail();
+        this.libraryUI.previewUI.hideTooltip();
         this.quiet?.refresh();
         if (this.tab === 'buildings' && this.libraryUI?.data && this.view.panelOpen) {
             this.libraryUI.draw();
@@ -131,6 +133,7 @@ export class ElevatorPanel {
     setTab(tab) {
         this.tab = tab === 'buildings' ? 'buildings' : 'floors';
         const buildings = this.tab === 'buildings';
+        if (!buildings) { this.libraryUI.previewUI.closeDetail(); this.libraryUI.previewUI.hideTooltip(); }
         this.floorTab.setAttribute('aria-selected', String(!buildings));
         this.buildingTab.setAttribute('aria-selected', String(buildings));
         this.floorTab.classList.toggle('stmn-elevator-active-tab', !buildings);
