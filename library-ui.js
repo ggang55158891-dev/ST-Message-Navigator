@@ -144,6 +144,7 @@ export class LibraryLobby {
         // The sidebar is presentation-only. Each item delegates actual chat
         // switching to the same existing owner.enter(...) method as the list.
         this.folderDrawer = make('nav','stmn-quiet-folder-drawer');
+        this.folderDrawer.id = 'stmn-quiet-folder-drawer';
         this.folderDrawer.setAttribute('aria-label','채팅 폴더 탐색');
         this.folderDrawer.hidden = true;
         const drawerHead = make('div','stmn-quiet-folder-header');
