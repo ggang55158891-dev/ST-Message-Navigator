@@ -630,7 +630,7 @@ async function run() {
                 'Ordinary Quiet view must remain minimal without batch checkboxes');
             const second=page.locator('.stmn-library-card').nth(1);
             await second.locator('.stmn-quiet-item-menu summary').click();
-            await second.getByRole('button',{name:'파일 작업 · 선택 / 원본 백업'}).click();
+            await second.getByRole('button',{name:'다중 선택 · 정리 / 원본 백업'}).click();
             assert.equal(await page.locator('.stmn-batch-checkbox').count(),2);
             assert.equal(await page.locator('.stmn-batch-checkbox:checked').count(),1);
             await page.getByRole('checkbox',{name:'건물 A 선택'}).check();
@@ -673,7 +673,7 @@ async function run() {
             await page.getByRole('tab',{name:'건물 로비'}).click();
             await page.locator('.stmn-library-card').nth(1).locator('.stmn-quiet-item-menu summary').click();
             await page.locator('.stmn-library-card').nth(1)
-                .getByRole('button',{name:'파일 작업 · 선택 / 원본 백업'}).click();
+                .getByRole('button',{name:'다중 선택 · 정리 / 원본 백업'}).click();
             await page.getByRole('button',{name:'원본 백업 ZIP'}).click();
             await page.waitForFunction(()=>document.querySelector('.stmn-batch-status')?.textContent.includes('404'));
             assert.equal(await page.locator('.stmn-batch-checkbox:checked').count(),1);
@@ -710,7 +710,7 @@ async function run() {
             await page.getByRole('tab',{name:'건물 로비'}).click();
             const second=page.locator('.stmn-library-card').nth(1);
             await second.locator('.stmn-quiet-item-menu summary').click();
-            await second.getByRole('button',{name:'파일 작업 · 선택 / 원본 백업'}).click();
+            await second.getByRole('button',{name:'다중 선택 · 정리 / 원본 백업'}).click();
             await page.getByRole('checkbox',{name:'건물 A 선택'}).check();
             assert.equal(await page.locator('.stmn-batch-count').textContent(),'2개 선택');
             await page.getByRole('button',{name:'일괄 정리'}).click();
