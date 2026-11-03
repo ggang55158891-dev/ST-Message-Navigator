@@ -197,7 +197,7 @@ test('Q07C interrupted rename audits both filenames without mutating server reco
     const requests=[];
     const fetcher=async(path,options)=>{
         assert.equal(path,'/api/chats/export','inspection must be read-only');
-        const id=JSON.parse(options.body).file.replace(/\\.jsonl$/,'');
+        const id=JSON.parse(options.body).file.replace(/\.jsonl$/,'');
         requests.push(id);
         return files.has(id)?response({result:files.get(id)}):{ok:false,status:404};
     };
