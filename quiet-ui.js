@@ -31,6 +31,27 @@ export class QuietShell {
         const header = this.view.panel.querySelector('.stmn-outline-header');
         this.headerActions = make('div', 'stmn-quiet-header-actions');
         this.searchButton = action('검색 열기', '⌕', () => this.toggleSearch());
+        this.folderButton = action('폴더 탐색 열기', '', () => {
+            if (this.activeTab === 'buildings' && this.isQuiet) {
+                this.elevator.libraryUI.setDrawerOpen();
+            }
+        });
+        this.folderButton.classList.add('stmn-quiet-folder-button');
+        this.folderButton.setAttribute('aria-controls','stmn-quiet-folder-drawer');
+        this.folderButton.setAttribute('aria-expanded','false');
+        // Small monochrome outline folder, not an emoji or another UI bar.
+        const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('viewBox','0 0 24 24');
+        svg.setAttribute('width','17');
+        svg.setAttribute('height','17');
+        svg.setAttribute('fill','none');
+        svg.setAttribute('stroke','currentColor');
+        svg.setAttribute('stroke-width','1.8');
+        svg.setAttribute('stroke-linejoin','round');
+        const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.setAttribute('d','M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z');
+        svg.append(path);
+        this.folderButton.append(svg);
         this.globalMenu = make('details', 'stmn-quiet-global');
         const globalSummary = make('summary', '', '···');
         globalSummary.title = '전체 메뉴';
@@ -42,7 +63,7 @@ export class QuietShell {
             action('진단·데이터 점검', '진단·데이터 점검', () => this.openSettings('diagnostics'), 'stmn-quiet-menu-item'),
         );
         this.globalMenu.append(globalSummary, globalItems);
-        this.headerActions.append(this.searchButton, this.globalMenu);
+        this.headerActions.append(this.folderButton, this.searchButton, this.globalMenu);
         header.insertBefore(this.headerActions, header.querySelector('.stmn-close'));
 
         this.toolbar = make('div', 'stmn-quiet-toolbar');
@@ -108,6 +129,17 @@ export class QuietShell {
         this.refresh();
     }
 
+    refreshFolderButton() {
+        if (!this.folderButton) return;
+        const visible = this.isQuiet && this.activeTab === 'buildings';
+        this.folderButton.hidden = !visible;
+        const open = Boolean(this.elevator.libraryUI?.drawerOpen);
+        this.folderButton.setAttribute('aria-expanded',String(open));
+        this.folderButton.setAttribute('aria-label',open ? '폴더 탐색 닫기' : '폴더 탐색 열기');
+        this.folderButton.title = open ? '폴더 탐색 닫기' : '폴더 탐색 열기';
+        this.folderButton.classList.toggle('stmn-quiet-folder-button-active',open && visible);
+    }
+
     refreshContext() {
         this.context.textContent = this.activeTab === 'buildings'
             ? '채팅 라이브러리'
@@ -118,6 +150,7 @@ export class QuietShell {
         this.root.dataset.quietSearch = this.searchOpen ? 'open' : 'closed';
         this.root.dataset.quietManage = this.manageOpen ? 'open' : 'closed';
         this.refreshContext();
+        this.refreshFolderButton();
         this.menuContent.replaceChildren();
         if (this.activeTab === 'floors') {
             this.menuContent.append(
@@ -149,15 +182,19 @@ export class QuietShell {
             this.menuContent.append(select, make('div', 'stmn-quiet-menu-label', '채팅 보기'));
             for (const [value, name] of [
                 ['all', '전체 채팅'],
-                ['folders', '폴더별 보기'],
+                ['folders', '폴더 탐색'],
                 ['favorites', '즐겨찾기'],
             ]) {
                 this.menuContent.append(action(name, name, () => {
                     const ui = this.elevator.libraryUI;
-                    ui.viewSelect.value = value;
-                    ui.viewSelect.dispatchEvent(new Event('change', { bubbles: true }));
                     this.listMenu.open = false;
-                    if (value === 'folders') this.toggleManage(true);
+                    if (value === 'folders') {
+                        // Folder browsing is not the same as filtering to the
+                        // unfiled category or opening the folder editor.
+                        ui.setDrawerOpen(true);
+                        return;
+                    }
+                    ui.setView(value);
                 }, 'stmn-quiet-menu-item'));
             }
             this.menuContent.append(make('div', 'stmn-quiet-menu-separator'));

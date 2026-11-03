@@ -86,7 +86,11 @@ export class ElevatorPanel {
         this.buildingList = element('div', 'stmn-building-list');
         this.buildingList.setAttribute('role', 'list');
         this.hint = element('div', 'stmn-building-hint', '건물은 채팅 파일 하나를 뜻해요. 각 건물 안의 메시지가 층이 됩니다.');
-        this.buildingsPane.append(intro, controls, toolbar, this.buildingList, this.hint);
+        // A flex content area allows the optional Quiet folder drawer beside
+        // the existing list without changing its data or behavior.
+        this.contentArea = element('div', 'stmn-building-content');
+        this.contentArea.append(this.buildingList);
+        this.buildingsPane.append(intro, controls, toolbar, this.contentArea, this.hint);
         this.libraryUI = new LibraryLobby(this);
 
         header.after(this.dashboard, this.tabs);
