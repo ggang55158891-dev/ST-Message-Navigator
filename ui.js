@@ -1,5 +1,7 @@
 import { DATA_KEY, MESSAGE_KEY, automaticTitle, getTitle, isCustomTitle } from './model.js';
 import { ElevatorPanel } from './elevator-ui.js';
+import { withQuietPreview, previewSwipes, messageTooltipText, QUIET_DETAIL_HEIGHT } from './quiet-preview.js';
+import { installExtensionUpdateUI } from './update-ui.js';
 import { installDiagnosticsSettings } from './diagnostics-ui.js';
 import { installSettingsBackupUI } from './settings-backup-ui.js';
 import { installLibraryBackupUI } from './library-backup-ui.js';
@@ -117,6 +119,12 @@ export class NavigatorView {
         this.query = '';
         this.editing = -1;
         this.editValue = '';
+        this.expandedPreviewIndex = null;
+        this.previewSwipeIndex = null;
+        this.previewChat = null;
+        this.previewBusy = false;
+        this.tooltipTimer = null;
+        this.tooltip = null;
         this.raf = null;
         this.lastRange = '';
         this.root = el('div', 'stmn-root');
@@ -421,6 +429,12 @@ export class NavigatorView {
         if (!this.panelOpen) return;
         const oldScroll = this.list.scrollTop;
         const context = this.callbacks.context();
+        if (this.previewChat !== context.chat) {
+            this.expandedPreviewIndex = null;
+            this.previewSwipeIndex = null;
+            this.previewChat = context.chat;
+            this.hideQuietTooltip();
+        }
         const storedTitles = context.chatMetadata?.[DATA_KEY]?.titles;
         this.entries = (context.chat || []).map((message, index) => {
             const rawText = message?.mes;
@@ -458,10 +472,13 @@ export class NavigatorView {
         const layout = buildOutlineRows(
             this.filtered, this.entries.length, this.groupCollapsed, Boolean(this.query),
         );
-        this.displayRows = layout.rows;
+        const extra = this.root.dataset.elevatorTheme === 'quiet'
+            ? withQuietPreview(layout.rows, this.expandedPreviewIndex)
+            : {rows:layout.rows,totalHeight:0};
+        this.displayRows = extra.rows;
         this.caption.textContent = '총 ' + this.entries.length.toLocaleString() + '개 메시지' +
             (this.query ? ' · 검색 결과 ' + this.filtered.length.toLocaleString() + '개' : '');
-        this.spacer.style.height = String(layout.totalHeight) + 'px';
+        this.spacer.style.height = String(layout.totalHeight + extra.totalHeight) + 'px';
         this.groupTools.hidden = this.elevator?.tab === 'buildings' || Boolean(this.query) || this.entries.length === 0;
         this.expandAllButton.disabled = this.groupCollapsed.size === 0;
         this.collapseAllButton.disabled = this.groupCollapsed.size >= Math.ceil(this.entries.length / GROUP_SIZE);
@@ -482,14 +499,22 @@ export class NavigatorView {
         const limit = this.list.scrollTop + (this.list.clientHeight || 400) + OVERSCAN * MESSAGE_ROW_HEIGHT;
         let end = Math.min(rows.length, start + 1);
         while (end < rows.length && rows[end].top < limit) end++;
-        const range = start + ':' + end + ':' + this.editing;
+        const range = start + ':' + end + ':' + this.editing + ':' + this.expandedPreviewIndex + ':' + this.previewSwipeIndex;
         if (!force && this.lastRange === range) return;
         this.lastRange = range;
+        const previousReading = this.spacer.querySelector('.stmn-quiet-preview-reading')?.scrollTop || 0;
+        const previousSwipe = this.spacer.querySelector('.stmn-quiet-swipe-text')?.scrollTop || 0;
         this.spacer.replaceChildren();
         const context = this.callbacks.context();
         const fragment = document.createDocumentFragment();
         for (let i = start; i < end; i++) {
             const item = rows[i];
+            if (item.kind === 'preview') {
+                const preview = this.renderQuietPreview(item.entry);
+                preview.style.top = String(item.top) + 'px';
+                fragment.append(preview);
+                continue;
+            }
             if (item.kind === 'group') {
                 const group = el('div', 'stmn-group');
                 group.style.top = String(item.top) + 'px';
@@ -578,6 +603,7 @@ export class NavigatorView {
                 row.append(edit);
                 const peek = button('peek', '#' + entry.index + ' 내용 미리보기', 'eye');
                 peek.classList.add('stmn-quiet-message-action');
+                this.bindQuietTooltip(peek,entry);
                 peek.addEventListener('click', () => this.showQuietMessagePreview(entry));
                 row.append(peek);
                 const menu = el('details','stmn-quiet-message-menu');
@@ -602,29 +628,162 @@ export class NavigatorView {
             fragment.append(row);
         }
         this.spacer.append(fragment);
+        const reading = this.spacer.querySelector('.stmn-quiet-preview-reading');
+        const swipe = this.spacer.querySelector('.stmn-quiet-swipe-text');
+        if (reading) reading.scrollTop = previousReading;
+        if (swipe) swipe.scrollTop = previousSwipe;
     }
 
-    /** Q-02 safe preview for the CURRENTLY LOADED chat only.
-     * Other chat contents and full hover tooltips are Q-04. */
+    /** Eye hover/focus shows only the 680-character excerpt.
+     * The tooltip is attached below that eye, never to an entire row. */
+    bindQuietTooltip(eye, entry) {
+        eye.addEventListener('mouseenter', () => {
+            this.hideQuietTooltip();
+            this.tooltipTimer = setTimeout(() => {
+                if (!eye.isConnected || this.root.dataset.elevatorTheme !== 'quiet') return;
+                this.showQuietTooltip(eye, entry);
+            }, 240);
+        });
+        eye.addEventListener('mouseleave', () => this.hideQuietTooltip());
+        eye.addEventListener('focus', () => this.showQuietTooltip(eye, entry));
+        eye.addEventListener('blur', () => this.hideQuietTooltip());
+    }
+
+    showQuietTooltip(eye, entry) {
+        if (!eye.isConnected || this.root.dataset.elevatorTheme !== 'quiet') return;
+        this.hideQuietTooltip();
+        const target = this.callbacks.context().chat?.[entry.index] || entry.message;
+        if (!this.tooltip) {
+            this.tooltip = el('aside', 'stmn-quiet-tooltip');
+            this.tooltip.setAttribute('role','tooltip');
+            document.body.append(this.tooltip);
+            this.onQuietTooltipScroll = () => this.hideQuietTooltip();
+            this.list.addEventListener('scroll', this.onQuietTooltipScroll,{passive:true});
+        }
+        const text = messageTooltipText(target);
+        const header = entry.index === this.entries.length - 1
+            ? '마지막 메시지' : '#' + entry.index + ' · 메시지 미리보기';
+        this.tooltip.replaceChildren(el('strong','',header),
+            el('div','stmn-quiet-tooltip-text',text || '(내용 없는 메시지)'));
+        this.tooltip.hidden = false;
+        const rect = eye.getBoundingClientRect();
+        const width = this.tooltip.offsetWidth;
+        const left = Math.max(8,Math.min(rect.left,window.innerWidth-width-8));
+        this.tooltip.style.left = left+'px';
+        this.tooltip.style.top = Math.max(8,rect.bottom+8)+'px';
+        this.tooltip.style.maxHeight = Math.max(65,window.innerHeight-rect.bottom-18)+'px';
+    }
+
+    hideQuietTooltip() {
+        if (this.tooltipTimer) clearTimeout(this.tooltipTimer);
+        this.tooltipTimer = null;
+        if (this.tooltip) this.tooltip.hidden = true;
+    }
+
+    /** v5: eye CLICK expands a full, inline preview row in the virtual list.
+     * Other-chat previews remain a separate Q-04 feature. */
     showQuietMessagePreview(entry) {
-        this.panel.querySelector('.stmn-quiet-message-preview')?.remove();
+        this.hideQuietTooltip();
+        if (this.root.dataset.elevatorTheme !== 'quiet') return;
+        if (this.expandedPreviewIndex === entry.index) {
+            this.expandedPreviewIndex = null;
+            this.previewSwipeIndex = null;
+        } else {
+            this.expandedPreviewIndex = entry.index;
+            const message = this.callbacks.context().chat?.[entry.index] || entry.message;
+            this.previewSwipeIndex = previewSwipes(message).selected;
+        }
+        this.applyFilter({resetScroll:false});
+        if (this.expandedPreviewIndex != null) {
+            const preview = this.displayRows.find(row =>
+                row.kind === 'preview' && row.entry.index === entry.index);
+            if (preview) {
+                const bottom = this.list.scrollTop + this.list.clientHeight;
+                if (preview.top + 75 > bottom) this.list.scrollTop = Math.max(0,preview.top-100);
+                this.renderRows(true);
+            }
+        }
+    }
+
+    renderQuietPreview(entry) {
+        const ctx = this.callbacks.context();
+        const message = ctx.chat?.[entry.index] || entry.message;
+        const { texts, selected } = previewSwipes(message);
+        const idx = Math.max(0,Math.min(this.previewSwipeIndex ?? selected,texts.length-1));
         const pane = el('section','stmn-quiet-message-preview');
-        pane.setAttribute('role','dialog');
-        pane.setAttribute('aria-label','#'+entry.index+' 메시지 내용 미리보기');
+        pane.style.height = QUIET_DETAIL_HEIGHT+'px';
+        pane.setAttribute('role','region');
+        pane.setAttribute('aria-label','#'+entry.index+' 메시지 상세 미리보기');
         const top = el('div','stmn-quiet-message-preview-top');
         top.append(el('strong','', '#'+entry.index+' · '+entry.title));
         const close = el('button','stmn-quiet-preview-close','×');
-        close.type = 'button';
-        close.setAttribute('aria-label','미리보기 닫기');
-        close.addEventListener('click',()=>pane.remove());
+        close.type='button';close.setAttribute('aria-label','미리보기 닫기');
+        close.addEventListener('click',()=>this.showQuietMessagePreview(entry));
         top.append(close);
-        const body = el('div','stmn-quiet-message-preview-text',
-            String(entry.message?.mes || '(내용 없는 메시지)').slice(0,680));
-        pane.append(top,body);
-        if (String(entry.message?.mes || '').length > 680)
-            pane.append(el('small','', '처음 680자만 표시합니다.'));
-        this.panel.append(pane);
-        close.focus();
+        pane.append(top);
+        pane.append(el('div','stmn-quiet-preview-label','메시지 전체 내용'));
+        const reading = el('div','stmn-quiet-preview-reading',
+            String(message?.mes ?? '') || '(내용 없는 메시지)');
+        reading.tabIndex=0;
+        pane.append(reading);
+        const divider = el('div','stmn-quiet-preview-divider');
+        pane.append(divider);
+        const bar = el('div','stmn-quiet-swipebar');
+        const label = el('span','',texts.length+'개 스와이프 · '+(idx+1)+' / '+texts.length);
+        const controls=el('div','stmn-quiet-swipebuttons');
+        const navButton = (text,desc,direction) => {
+            const b=el('button','',text);b.type='button';
+            b.setAttribute('aria-label',desc);
+            b.disabled = texts.length<=1 || this.previewBusy;
+            b.addEventListener('click',()=> {
+                this.previewSwipeIndex = (idx+direction+texts.length)%texts.length;
+                this.renderRows(true);
+            });
+            return b;
+        };
+        controls.append(navButton('‹','이전 스와이프',-1));
+        const indicator=el('span','stmn-quiet-swipe-active',
+            idx===selected?'현재 적용됨':'미리보기 중');
+        controls.append(indicator,navButton('›','다음 스와이프',1));
+        bar.append(label,controls);
+        pane.append(bar);
+        const swipeText=el('div','stmn-quiet-swipe-text',texts[idx] || '(내용 없는 답변)');
+        swipeText.tabIndex=0;
+        pane.append(swipeText);
+        const bottom=el('div','stmn-quiet-preview-actions');
+        const go=el('button','stmn-quiet-preview-go','이 층으로 이동');
+        go.type='button';
+        go.addEventListener('click',()=>this.callbacks.goToIndex(entry.index));
+        bottom.append(go);
+        if (texts.length>1) {
+            const apply=el('button','stmn-quiet-preview-apply',
+                idx===selected?'현재 적용된 스와이프':'이 스와이프 적용');
+            apply.type='button';
+            apply.disabled=idx===selected || !this.callbacks.selectSwipe || this.previewBusy;
+            apply.addEventListener('click',async()=>{
+                if (this.previewBusy) return;
+                this.previewBusy=true;
+                apply.disabled=true;
+                try {
+                    const ok=await this.callbacks.selectSwipe(entry.index,idx);
+                    if (ok) {
+                        this.previewSwipeIndex=idx;
+                        this.rebuild({keepScroll:true});
+                        this.setStatus('스와이프 '+(idx+1)+'번을 적용했습니다.');
+                    } else {
+                        this.setStatus('스와이프 변경을 확인할 수 없습니다.',true);
+                    }
+                } catch(error) {
+                    this.setStatus(error?.message || '스와이프 변경에 실패했습니다.',true);
+                } finally {
+                    this.previewBusy=false;
+                    this.renderRows(true);
+                }
+            });
+            bottom.append(apply);
+        }
+        pane.append(bottom);
+        return pane;
     }
 
     async commitEdit(index) {
@@ -651,6 +810,9 @@ export class NavigatorView {
 
     destroy() {
         if (this.raf !== null) cancelAnimationFrame(this.raf);
+        this.hideQuietTooltip();
+        if (this.onQuietTooltipScroll) this.list.removeEventListener('scroll',this.onQuietTooltipScroll);
+        this.tooltip?.remove();
         this.panelResize.removeEventListener('pointerdown', this.onPanelResizeDown);
         window.removeEventListener('pointermove', this.onPanelResizeMove);
         window.removeEventListener('pointerup', this.onPanelResizeEnd);
@@ -677,6 +839,7 @@ export function installSettings(context, settings, onChange, diagnostics, backup
     const summary = el('summary', '', '엘리베이터 · 채팅과 메시지 탐색');
     heading.append(summary);
     const inner = el('div', 'stmn-settings-inner');
+    installExtensionUpdateUI(inner, () => window.SillyTavern?.getContext?.() || context);
     const themeLabel = el('label', '', '엘리베이터 외형');
     themeLabel.htmlFor = 'stmn-elevator-theme';
     const themeSelect = el('select');
