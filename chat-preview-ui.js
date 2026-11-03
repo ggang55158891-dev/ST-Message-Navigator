@@ -3,7 +3,7 @@
  * Tooltip is restricted to eye hover/focus. Clicking the eye opens a
  * separately scrollable FULL title directory with virtual rows.
  */
-import {cleanChatId} from './building-data.js';
+import {cleanChatId, buildingScope} from './building-data.js';
 import {readChatPreview, ChatPreviewCache, CHAT_PREVIEW_ROW_HEIGHT} from './chat-preview.js';
 
 const make=(tag,cls='',text)=>{
@@ -88,6 +88,7 @@ export class QuietChatPreviewUI {
         return !this.destroyed && this.owner.tab==='buildings' &&
             this.owner.view.root.dataset.elevatorTheme==='quiet' &&
             this.owner.scope===scope &&
+            buildingScope(this.owner.callbacks.context())===scope &&
             this.owner.buildings.some(x=>cleanChatId(x.id)===cleanChatId(item.id));
     }
 
