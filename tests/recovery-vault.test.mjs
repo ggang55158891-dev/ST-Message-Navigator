@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {hashJsonl,parseChatJsonl,sameChatJsonl,expiryFor,TRASH_RETENTION} from '../recovery-vault.js';
-import {archiveBeforeAction,confirmActionResult,restoreFromVault,recoveredFilename} from '../recovery-operations.js';
+import {archiveBeforeAction,confirmActionResult,restoreFromVault,recoveredFilename,inspectArchiveStatus} from '../recovery-operations.js';
 import {emptyLibrary,emptyRecord,chatReference} from '../library-data.js';
 
 const raw='{"chat_metadata":{"test":1}}\n{"mes":"안녕","swipes":["원본","대안"],"swipe_id":1}\n';
@@ -188,4 +188,45 @@ test('Q07C group archive restores as a new file, updates membership after verifi
     assert.equal(restoredLibrary.tags[0].id,'tagA');
     assert.ok(paths.includes('/api/chats/group/save'));
     assert.ok(paths.includes('/api/groups/edit'));
+});
+
+test('Q07C interrupted rename audits both filenames without mutating server records',async()=>{
+    const state=ctx();const files=new Map([['old',raw]]);
+    const record={scope,avatar:'hero.png',isGroup:false,name:'old',action:'rename',
+        resultName:'new',hash:await hashJsonl(raw)};
+    const requests=[];
+    const fetcher=async(path,options)=>{
+        assert.equal(path,'/api/chats/export','inspection must be read-only');
+        const id=JSON.parse(options.body).file.replace(/\\.jsonl$/,'');
+        requests.push(id);
+        return files.has(id)?response({result:files.get(id)}):{ok:false,status:404};
+    };
+    const query=()=>inspectArchiveStatus({context:()=>state,record,fetcher});
+    assert.equal((await query()).code,'intact');
+    files.set('new',files.get('old'));files.delete('old');
+    assert.equal((await query()).code,'renamed');
+    files.set('old',raw);
+    assert.equal((await query()).code,'uncertain','two files must not be treated as a successful rename');
+    assert.deepEqual(requests,['old','new','old','new','old','new']);
+});
+
+test('Q07C interrupted deletion audit distinguishes missing, unchanged and modified sources',async()=>{
+    const state=ctx();let source=raw;
+    const record={scope,avatar:'hero.png',isGroup:false,name:'old',action:'delete',
+        hash:await hashJsonl(raw)};
+    const fetcher=async(path)=>{
+        assert.equal(path,'/api/chats/export','audit cannot call a destructive endpoint');
+        return source===null?{ok:false,status:404}:response({result:source});
+    };
+    const query=()=>inspectArchiveStatus({context:()=>state,record,fetcher});
+    assert.equal((await query()).code,'intact');
+    source=raw.replace('안녕','변경');
+    assert.equal((await query()).code,'changed');
+    source=null;
+    assert.equal((await query()).code,'missing');
+    let calls=0;
+    const wrongScope={...state,characters:[{avatar:'other.png'}]};
+    await assert.rejects(()=>inspectArchiveStatus({context:()=>wrongScope,record,
+        fetcher:async()=>{calls++;return response({result:raw});}}),/원래 캐릭터/);
+    assert.equal(calls,0);
 });
