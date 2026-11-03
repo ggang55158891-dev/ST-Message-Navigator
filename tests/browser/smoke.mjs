@@ -762,6 +762,8 @@ async function run() {
                 'Closed folders must NOT instantiate 120 chat buttons');
             const progress=drawer.locator('[data-section="folder:f_progress"]');
             await progress.locator('summary').click();
+            await page.waitForFunction(() =>
+                document.querySelectorAll('[data-section="folder:f_progress"] .stmn-quiet-folder-chat').length === 30);
             assert.equal(await progress.locator('.stmn-quiet-folder-chat').count(),30);
             assert.equal((await progress.locator('.stmn-quiet-folder-chat').first().textContent())
                 .includes('File 0'),true);
