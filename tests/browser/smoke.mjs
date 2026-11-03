@@ -112,6 +112,12 @@ async function setupPage(browser, baseURL, messageCount = 23, size = { width: 12
             },
             getTheme: () => 'classic',
             getSkyMode: () => 'auto',
+            currentLibraryScope: () => {
+                const ctx=window.__stmnContext;
+                return ctx.groupId != null && ctx.groupId !== ''
+                    ? 'group:'+ctx.groupId
+                    : 'character:'+String(ctx.characters?.[ctx.characterId]?.avatar || ctx.characterId);
+            },
         };
         window.__stmnView = new NavigatorView(callbacks);
         window.__stmnView.setActive(0);
