@@ -723,6 +723,106 @@ async function run() {
             assert.equal(mockBody[1].global,false);
         });
 
+        await check('Q04 eye-only chat tooltip fetches last five and full directory without chat switching', async setup => {
+            const page=await setup(24);
+            const requests=[];
+            await page.route('**/api/chats/get',async route=>{
+                const data=route.request().postDataJSON();
+                requests.push(data);
+                const messages=Array.from({length:260},(_,i)=>({
+                    name:i%2?'Character':'User',is_user:i%2===0,
+                    mes:'메시지 '+i+' · '+(i===259?'끝'.repeat(600):'본문의 첫 문장입니다.'),
+                    ...(i===3?{stmn_message_id_v1:'special-id'}:{}),
+                }));
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify([{chat_metadata:{
+                        stmn_message_outline_v1:{schema:1,titles:{'special-id':'사용자 지정 제목'}}
+                    }},...messages])});
+            });
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-building-card').first().waitFor();
+            // Whole-row hovering is intentionally inert.
+            await page.locator('.stmn-building-card').last().hover();
+            assert.equal(await page.locator('.stmn-quiet-chat-tooltip').isVisible(),false);
+            const eye=page.getByRole('button',{name:'건물 B 채팅 미리보기'});
+            await eye.hover();
+            await page.locator('.stmn-quiet-chat-tooltip').waitFor({state:'visible'});
+            await page.waitForFunction(()=>
+                document.querySelectorAll('.stmn-quiet-chat-tooltip-title').length===5);
+            assert.deepEqual(await page.locator('.stmn-quiet-chat-tooltip-title span:first-child').allTextContents(),
+                ['#255','#256','#257','#258','#259']);
+            const excerpt=await page.locator('.stmn-quiet-chat-tooltip-body').textContent();
+            assert.equal(excerpt.length,681);
+            const eyeRect=await eye.boundingBox();
+            const tooltipRect=await page.locator('.stmn-quiet-chat-tooltip').boundingBox();
+            assert.ok(tooltipRect.y>=eyeRect.y+eyeRect.height-2);
+            assert.equal(requests.length,1);
+            assert.equal(requests[0].file_name,'chat-b');
+            assert.equal(requests[0].avatar_url,'none');
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a',
+                'Viewing another chat must not switch away from current chat');
+            await eye.click();
+            await page.locator('.stmn-quiet-chat-detail').waitFor({state:'visible'});
+            assert.equal(await page.locator('.stmn-quiet-chat-detail-headings small').textContent(),'260개 메시지');
+            assert.ok((await page.locator('.stmn-quiet-chat-detail-row').count())<60,
+                'Complete title list must remain virtualized');
+            assert.equal(requests.length,1,'Click must reuse already-fetched view projection');
+            await page.locator('.stmn-quiet-chat-detail-list').evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll'));});
+            const custom=page.getByRole('button',{name:'#3 사용자 지정 제목 채팅으로 이동'});
+            await custom.waitFor();
+            await custom.click();
+            await page.waitForFunction(()=>window.__stmnContext.chatId==='chat-b');
+            assert.equal(await page.getByRole('tab',{name:'층 안내'}).getAttribute('aria-selected'),'true');
+            assert.equal(await page.locator('.stmn-quiet-chat-detail').isVisible(),false);
+            assert.equal(await page.evaluate(()=>window.__stmnActions.includes(3)),true,
+                'Selected directory entry should navigate to its message after switching chats');
+        });
+
+        await check('Q04 group chat uses read-only group endpoint, scope changes invalidate stale previews', async setup => {
+            const page=await setup(14);
+            const calls=[];
+            await page.route('**/api/chats/group/get',async route=>{
+                calls.push(route.request().postDataJSON());
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify([{chat_metadata:{}},{mes:'그룹 이야기 첫 장면'},{mes:'그룹 마지막'}])});
+            });
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.groupId=77;
+                ctx.groups=[{id:77,chats:['group-a','group-b']}];
+                ctx.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.callbacks.listBuildings=async()=>({
+                    scope:'group:77',title:'Group',
+                    buildings:[
+                        {id:'group-a',name:'그룹 A',lastActivity:30,count:1},
+                        {id:'group-b',name:'그룹 B',lastActivity:20,count:2},
+                    ],
+                });
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const eye=page.getByRole('button',{name:'그룹 B 채팅 미리보기'});
+            await eye.waitFor();
+            await eye.click();
+            await page.locator('.stmn-quiet-chat-detail-row').first().waitFor();
+            assert.equal(await page.locator('.stmn-quiet-chat-detail-row').count(),2);
+            assert.deepEqual(calls,[{id:'group-b'}]);
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.groupId=null;
+                window.__stmnView.elevator.onChatChanged();
+            });
+            await page.waitForFunction(()=>document.querySelector('.stmn-quiet-chat-detail')?.hidden===true);
+        });
+
         await check('Q03 Quiet folder drawer expands lazily, filters and navigates without moving JSONL', async setup => {
             const page=await setup(24);
             await page.evaluate(async()=>{
