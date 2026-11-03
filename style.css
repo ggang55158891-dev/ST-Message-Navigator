@@ -633,7 +633,7 @@
     background: transparent;
     list-style: none;
     cursor: pointer;
-    font: 19px/1 inherit;
+    font-family: inherit; font-size: 19px; line-height: 1;
 }
 #stmn-root[data-elevator-theme="quiet"] .stmn-quiet-global > summary::-webkit-details-marker,
 #stmn-root[data-elevator-theme="quiet"] .stmn-quiet-list-menu > summary::-webkit-details-marker { display: none; }
@@ -661,14 +661,14 @@
 }
 #stmn-root[data-elevator-theme="quiet"] .stmn-elevator-mini-label { display: none; }
 #stmn-root[data-elevator-theme="quiet"] .stmn-elevator-building {
-    font: 500 11px/1.4 inherit; color: #a0a6a4;
+    font-family: inherit; font-size: 11px; line-height: 1.4; font-weight: 500; color: #a0a6a4;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #stmn-root[data-elevator-theme="quiet"] .stmn-elevator-level {
     border: 0; padding: 0; min-width: 0; flex: none; display: block;
 }
 #stmn-root[data-elevator-theme="quiet"] .stmn-elevator-floor {
-    color: #9aa09d; font: 600 11px/1.4 inherit;
+    color: #9aa09d; font-family: inherit; font-size: 11px; line-height: 1.4; font-weight: 600;
 }
 #stmn-root[data-elevator-theme="quiet"] .stmn-elevator-tabs {
     display: flex;
@@ -715,7 +715,7 @@
 }
 #stmn-root[data-elevator-theme="quiet"] .stmn-quiet-menu-item {
     display: block; width: 100%; min-height: 37px; padding: 9px 11px;
-    text-align: left; font: 500 12px/1.45 inherit;
+    text-align: left; font-family: inherit; font-size: 12px; line-height: 1.45; font-weight: 500;
     border: none; border-radius: 9px; color: #343839; background: transparent;
     cursor: pointer;
 }
