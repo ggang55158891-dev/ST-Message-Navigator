@@ -481,7 +481,11 @@ class NavigatorApp {
         let changed=false;
         try {
             changed=setSwipeAnnotation(chat,metadata,index,swipeIndex,patch);
-            if(!changed) return false;
+            if(!changed) {
+                if(previousStore===undefined)delete metadata[DATA_KEY];
+                else metadata[DATA_KEY]=previousStore;
+                return false;
+            }
             await ctx.saveMetadata();
             if(context().chat!==chat || context().chatId!==chatId) {
                 throw new Error('저장 중 채팅이 전환되었습니다. 저장 결과를 확인해 주세요.');
