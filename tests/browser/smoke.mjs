@@ -685,8 +685,10 @@ async function run() {
             const page=await setup(3);
             const mutationRequests=[];
             page.on('request',request=>{
-                if(/\\/api\\/chats\\/(?:save|delete|rename|group\\/save)/.test(request.url()))
-                    mutationRequests.push(request.url());
+                const url=request.url();
+                if(['/api/chats/save','/api/chats/delete','/api/chats/rename',
+                    '/api/chats/group/save'].some(path=>url.includes(path)))
+                    mutationRequests.push(url);
             });
             await page.evaluate(async()=>{
                 const {LibraryRepository}=await import('/library-repository.js');
