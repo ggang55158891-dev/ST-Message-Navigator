@@ -39,6 +39,15 @@ test('versioned backup round-trips all supported settings and excludes unrelated
     assert.equal(exported.includes('SHOULD NEVER EXPORT'), false);
 });
 
+test('quiet theme round-trips without changing legacy backup structure', () => {
+    const quiet = { ...DEFAULT_SETTINGS, elevatorTheme: 'quiet' };
+    const backup = createSettingsBackup(quiet, { version: '1.7.0' });
+    const parsed = parseSettingsBackup(backup);
+    assert.equal(parsed.settings.elevatorTheme, 'quiet');
+    assert.equal(normalizeSettings(quiet).elevatorTheme, 'quiet');
+    assert.deepEqual(Object.keys(parsed.settings).sort(), [...SETTINGS_FIELDS].sort());
+});
+
 test('partial backups and modified/unknown schema versions are rejected', () => {
     const base = JSON.parse(sample());
     delete base.sections.settings.mode;
