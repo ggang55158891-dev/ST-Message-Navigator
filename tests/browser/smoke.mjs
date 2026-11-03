@@ -158,7 +158,7 @@ async function bootSettingsApp(page) {
         window.__themeSaveCount = 0;
         await import('/index.js');
     });
-    await page.locator('#stmn-elevator-theme').waitFor();
+    await page.locator('#stmn-elevator-theme').waitFor({ state: 'attached' });
 }
 
 async function run() {
