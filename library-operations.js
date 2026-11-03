@@ -164,3 +164,51 @@ export function forgetLibraryReference(existing,scope,id) {
     delete lib.records[key];
     return {library:validateLibrary(lib),changed:true};
 }
+
+
+/** Q-08/G-01: one atomic, non-destructive change for up to 20 chat records.
+ * The caller must pass the current-scope server list, not a stale filtered UI.
+ * This never fetches or mutates a JSONL file or other extensions' metadata.
+ */
+export const MAX_BULK_LIBRARY_CHATS = 20;
+export function bulkChangeLibrary(existing,{
+    scope,ids,availableIds,operation,value=null,
+}={}){
+    if(typeof scope!=='string' || !/^(character|group):.+$/.test(scope))
+        throw new Error('채팅 범위를 확인할 수 없습니다.');
+    if(!Array.isArray(ids) || !ids.length || ids.length>MAX_BULK_LIBRARY_CHATS ||
+       !Array.isArray(availableIds))
+        throw new Error('1~20개의 현재 채팅만 일괄 관리할 수 있습니다.');
+    const known=new Set(availableIds);
+    const unique=new Set(ids);
+    if(unique.size!==ids.length ||
+       ids.some(id=>typeof id!=='string' || !id ||
+           id.endsWith('.jsonl') || !known.has(id)))
+        throw new Error('선택한 채팅이 현재 목록에 없거나 중복됐습니다. 새로고침 후 다시 선택해 주세요.');
+    const library=validateLibrary(existing);
+    if(operation==='folder'){
+        if(value!==null && !library.folders.some(x=>x.id===value))
+            throw new Error('선택한 폴더가 존재하지 않습니다.');
+    } else if(['tag-add','tag-remove'].includes(operation)){
+        if(typeof value!=='string' || !library.tags.some(x=>x.id===value))
+            throw new Error('선택한 태그가 존재하지 않습니다.');
+    } else if(!['favorite-add','favorite-remove'].includes(operation)){
+        throw new Error('지원하지 않는 일괄 정리 작업입니다.');
+    }
+    let changed=0;
+    for(const id of ids){
+        const ref=chatReference(scope,id);
+        const old=library.records[ref]||emptyRecord();
+        const next={...old,tagIds:[...old.tagIds]};
+        if(operation==='folder')next.folderId=value;
+        if(operation==='favorite-add')next.favorite=true;
+        if(operation==='favorite-remove')next.favorite=false;
+        if(operation==='tag-add' && !next.tagIds.includes(value))next.tagIds.push(value);
+        if(operation==='tag-remove')next.tagIds=next.tagIds.filter(x=>x!==value);
+        if(JSON.stringify(old)!==JSON.stringify(next)){
+            library.records[ref]=next;
+            changed++;
+        }
+    }
+    return {library:validateLibrary(library),changed};
+}
