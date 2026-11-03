@@ -643,6 +643,83 @@ async function run() {
             assert.equal(await page.locator('.stmn-building-card-title').filter({hasText:'건물 B'}).count(),1);
         });
 
+        await check('Quiet v5 eye hover excerpt vs click full text and complete swipe navigation', async setup => {
+            const page = await setup(25);
+            await page.evaluate(() => {
+                const ctx=window.__stmnContext;
+                window.__previewSelections=[];
+                for (const m of ctx.chat) {
+                    m.mes='첫 번째 '+ '가'.repeat(1200);
+                    m.swipes=[m.mes, '두 번째 '+ '나'.repeat(1150),'세 번째 '+ '다'.repeat(1400)];
+                    m.swipe_id=0;
+                }
+                window.__stmnView.callbacks.selectSwipe=async(index,swipeIndex)=>{
+                    window.__previewSelections.push({index,swipeIndex});
+                    ctx.chat[index].swipe_id=swipeIndex;
+                    ctx.chat[index].mes=ctx.chat[index].swipes[swipeIndex];
+                    return true;
+                };
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            const eye=page.locator('.stmn-row').first().getByRole('button',{name:/내용 미리보기/});
+            const sourceIndex=Number(await eye.locator('xpath=..').getAttribute('data-index'));
+            await eye.hover();
+            await page.locator('.stmn-quiet-tooltip').waitFor({state:'visible'});
+            const excerpt=await page.locator('.stmn-quiet-tooltip-text').textContent();
+            assert.equal(excerpt.length,681,'tooltip is the ONLY place limited to 680 chars');
+            const tooltipRect=await page.locator('.stmn-quiet-tooltip').boundingBox();
+            const eyeRect=await eye.boundingBox();
+            assert.ok(tooltipRect.y>=eyeRect.y+eyeRect.height-2,'tooltip is below the eye');
+            await eye.click();
+            await page.locator('.stmn-quiet-message-preview').waitFor({state:'visible'});
+            assert.equal((await page.locator('.stmn-quiet-preview-reading').textContent()).length,1204);
+            assert.equal((await page.locator('.stmn-quiet-swipe-text').textContent()).length,1204);
+            await page.getByRole('button',{name:'다음 스와이프'}).click();
+            assert.ok((await page.locator('.stmn-quiet-swipe-text').textContent()).startsWith('두 번째'));
+            assert.equal((await page.locator('.stmn-quiet-swipe-text').textContent()).length,1154);
+            await page.getByRole('button',{name:'이 스와이프 적용'}).click();
+            assert.deepEqual(await page.evaluate(()=>window.__previewSelections[0]),
+                {index:sourceIndex,swipeIndex:1});
+            assert.equal((await page.locator('.stmn-quiet-preview-reading').textContent()).length,1154,
+                'after applying, the actual current message becomes the selected swipe');
+            await page.getByRole('button',{name:'미리보기 닫기'}).click();
+            assert.equal(await page.locator('.stmn-quiet-message-preview').count(),0);
+        });
+
+        await check('extension settings updater checks Git branch and updates only after click', async setup => {
+            const page=await setup(2,undefined,true);
+            const mockBody=[];
+            await page.route('**/api/extensions/version',async route=>{
+                mockBody.push(route.request().postDataJSON());
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({isUpToDate:false,currentBranchName:'main',
+                        currentCommitHash:'1234567890abcdef',remoteUrl:'https://github.com/test/repo.git'})});
+            });
+            await page.route('**/api/extensions/update',async route=>{
+                mockBody.push(route.request().postDataJSON());
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({isUpToDate:false,shortCommitHash:'abcdef0'})});
+            });
+            await page.evaluate(()=>{window.__themeAppContext.getRequestHeaders=()=>({
+                'Content-Type':'application/json','X-CSRF-Token':'test-token',
+            });});
+            await page.locator('#stmn-settings > details > summary').click();
+            const update=page.locator('#stmn-update-button');
+            await update.click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-update-controls')?.dataset.updateState==='available');
+            assert.equal(await update.textContent(),'업데이트 설치');
+            assert.equal(await page.locator('.stmn-update-controls').getAttribute('data-update-state'),'available');
+            await update.click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-update-controls')?.dataset.updateState==='updated');
+            assert.equal(await page.getByRole('button',{name:'새로고침하여 적용'}).isVisible(),true);
+            assert.equal(mockBody.length,2);
+            assert.equal(mockBody[0].extensionName,'ST-Message-Navigator');
+            assert.equal(mockBody[1].extensionName,'ST-Message-Navigator');
+            assert.equal(mockBody[0].global,false);
+            assert.equal(mockBody[1].global,false);
+        });
+
         await check('D library aliases, favorites, folder assignment and persistence', async setup => {
             const page = await setup(23);
             await page.evaluate(async () => {
