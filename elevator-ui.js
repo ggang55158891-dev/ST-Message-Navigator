@@ -1,6 +1,7 @@
 import { buildingScope, cleanChatId } from './building-data.js';
 import { LibraryLobby } from './library-ui.js';
 import { emptyLibrary } from './library-data.js';
+import { ELEVATOR_THEMES } from './settings-backup.js';
 import { QuietShell } from './quiet-ui.js';
 
 function element(tag, className, text) {
@@ -97,9 +98,8 @@ export class ElevatorPanel {
     }
 
     applyTheme(theme, skyMode) {
-        const themes = ['classic', 'restricted', 'sky', 'quiet'];
         const skyModes = ['auto', 'day', 'night'];
-        this.view.root.dataset.elevatorTheme = themes.includes(theme) ? theme : 'classic';
+        this.view.root.dataset.elevatorTheme = ELEVATOR_THEMES.includes(theme) ? theme : 'classic';
         this.view.root.dataset.elevatorSky = skyModes.includes(skyMode) ? skyMode : 'auto';
         this.quiet?.refresh();
     }
