@@ -453,7 +453,7 @@ export class LibraryLobby {
                     const details = wrapper.querySelector('.stmn-library-details');
                     if (details) details.open = true;
                 });
-                const selectFile = button('파일 작업 · 선택 / 원본 백업', 'stmn-quiet-menu-item', () => {
+                const selectFile = button('다중 선택 · 정리 / 원본 백업', 'stmn-quiet-menu-item', () => {
                     menu.open=false;
                     this.fileUI.enable(true,item);
                 });
