@@ -3,6 +3,7 @@ import { cleanChatId } from './building-data.js';
 import { chatReference, emptyLibrary } from './library-data.js';
 import { selectLibraryChats } from './library-operations.js';
 import { buildQuietFolderSections, FOLDER_DRAWER_PAGE_SIZE } from './quiet-folders.js';
+import { QuietChatPreviewUI } from './chat-preview-ui.js';
 
 const make = (tag, className = '', text) => {
     const el = document.createElement(tag);
@@ -156,6 +157,7 @@ export class LibraryLobby {
         this.folderDrawerList.setAttribute('role','group');
         this.folderDrawer.append(drawerHead,this.folderDrawerList);
         owner.contentArea.prepend(this.folderDrawer);
+        this.previewUI = new QuietChatPreviewUI(owner);
     }
 
     setDrawerOpen(force) {
@@ -259,6 +261,7 @@ export class LibraryLobby {
     }
 
     setData(data, scope) {
+        this.previewUI.invalidate(scope);
         if (this.loadedScope !== scope) {
             this.loadedScope = scope;
             this.visible = 100;
@@ -326,6 +329,7 @@ export class LibraryLobby {
     }
 
     draw() {
+        this.previewUI.hideTooltip();
         const owner = this.owner;
         const data = this.data;
         if (!data) {
@@ -416,18 +420,11 @@ export class LibraryLobby {
                 const editDescription = button('✎','stmn-quiet-chat-action', showDescriptionEditor);
                 editDescription.title = '채팅 설명 수정';
                 editDescription.setAttribute('aria-label',item.name+' 설명 수정');
-                const peek = make('details','stmn-quiet-item-preview');
-                const peekSummary = make('summary','','◉');
-                peekSummary.title = '채팅 정보 보기 · 메시지 본문 미리보기는 다음 단계';
-                peekSummary.setAttribute('aria-label',item.name+' 채팅 정보 보기');
-                const peekBody = make('div','stmn-quiet-item-preview-body');
-                peekBody.append(make('strong','',item.name));
-                peekBody.append(make('p','',item.description || '채팅 설명 없음'));
-                if (item.folderName) peekBody.append(make('small','', '폴더: '+item.folderName));
-                if (item.tagNames.length) peekBody.append(make('small','', '태그: '+item.tagNames.join(', ')));
-                if (Number.isInteger(item.count)) peekBody.append(make('small','', '메시지 '+item.count+'개'));
-                peekBody.append(make('small','', '전체 메시지 미리보기는 Q-04에서 추가됩니다.'));
-                peek.append(peekSummary,peekBody);
+                const peek = button('','stmn-quiet-chat-eye',()=>{});
+                peek.title = '채팅 미리보기 · 전체 메시지 목차';
+                peek.setAttribute('aria-label',item.name+' 채팅 미리보기');
+                peek.innerHTML = '<svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+                this.previewUI.attachEye(peek,item);
                 const menu = make('details','stmn-quiet-item-menu');
                 const summary = make('summary','','···');
                 summary.title = '채팅 관리 메뉴';
@@ -525,6 +522,7 @@ export class LibraryLobby {
 
     destroy() {
         this.closeEditor();
+        this.previewUI.destroy();
         this.folderDrawer.remove();
         this.expandedFolderKeys.clear();
         this.folderPageLimits.clear();
