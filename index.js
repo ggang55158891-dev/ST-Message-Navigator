@@ -75,6 +75,7 @@ class NavigatorApp {
             listBuildings: listAvailableBuildings,
             enterBuilding,
             readLibrary: () => this.library.read(),
+            libraryRepository: this.library,
             currentLibraryScope: () => buildingScope(context()),
             syncFileLibrary: (scope,source,destination) => this.library.syncFileChange(scope,source,destination),
             changeLibrary: action => {
@@ -590,7 +591,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.15.0)');
+        console.info(PREFIX, 'loaded (v1.16.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
