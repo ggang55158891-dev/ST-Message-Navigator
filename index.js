@@ -6,7 +6,7 @@ import { validPanelSize } from './panel-size.js';
 import { listAvailableBuildings, enterBuilding } from './buildings.js';
 import { buildingScope } from './building-data.js';
 import { Diagnostics } from './diagnostics.js';
-import { DEFAULT_SETTINGS, SETTINGS_FIELDS, normalizeSettings, diffSettings } from './settings-backup.js';
+import { DEFAULT_SETTINGS, SETTINGS_FIELDS, ELEVATOR_THEMES, normalizeSettings, diffSettings } from './settings-backup.js';
 import { inspectTitleMetadata } from './metadata-audit.js';
 import { LibraryRepository } from './library-repository.js';
 
@@ -145,7 +145,7 @@ class NavigatorApp {
         if (key === 'position' && !validNavPosition(value)) return;
         if (key === 'panelSize' && value !== null && !validPanelSize(value)) return;
         if (key === 'showNavigationButtons' && typeof value !== 'boolean') return;
-        if (key === 'elevatorTheme' && !['classic', 'restricted', 'sky'].includes(value)) return;
+        if (key === 'elevatorTheme' && !ELEVATOR_THEMES.includes(value)) return;
         if (key === 'elevatorSky' && !['auto', 'day', 'night'].includes(value)) return;
         if (key === 'diagnosticsEnabled' && typeof value !== 'boolean') return;
         this.settings[key] = value;
