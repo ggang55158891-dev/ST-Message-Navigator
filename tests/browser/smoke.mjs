@@ -581,17 +581,30 @@ async function run() {
                 window.__stmnView.callbacks.currentLibraryScope = () => 'character:none';
                 window.__stmnView.callbacks.isBookmarked = index =>
                     isMessageBookmarked(ctx.chat[index],ctx.chatMetadata);
+                window.__q02BookmarkEvents = [];
                 window.__stmnView.callbacks.toggleBookmark = async index => {
-                    setMessageBookmark(ctx.chat,ctx.chatMetadata,index,true,()=> 'bookmark-'+index);
-                    window.__stmnView.renderRows(true);
+                    try {
+                        const before = isMessageBookmarked(ctx.chat[index],ctx.chatMetadata);
+                        const changed = setMessageBookmark(ctx.chat,ctx.chatMetadata,index,true,()=> 'bookmark-'+index);
+                        const after = isMessageBookmarked(ctx.chat[index],ctx.chatMetadata);
+                        window.__q02BookmarkEvents.push({index,before,changed,after});
+                        window.__stmnView.renderRows(true);
+                    } catch(error) {
+                        window.__q02BookmarkEvents.push({index,error:error?.message || String(error)});
+                    }
                 };
                 window.__stmnView.elevator.applyTheme('quiet','auto');
             });
             await page.locator('[data-action="outline"]').click();
             await page.locator('.stmn-quiet-bookmark').first().click();
-            await page.waitForFunction(() =>
-                document.querySelector('.stmn-quiet-bookmark')?.getAttribute('aria-pressed') === 'true',
-                { timeout: 2000 });
+            const debug = await page.evaluate(() => ({
+                events:window.__q02BookmarkEvents,
+                buttons:[...document.querySelectorAll('.stmn-quiet-bookmark')].slice(0,3).map(b=>({
+                    index:b.closest('.stmn-row')?.dataset.index,pressed:b.getAttribute('aria-pressed')
+                })),
+                metadata:window.__stmnContext.chatMetadata,
+            }));
+            assert.equal(debug.buttons[0].pressed,'true',JSON.stringify(debug));
             await page.locator('.stmn-row').first().getByRole('button',{name:/내용 미리보기/}).click();
             assert.equal(await page.locator('.stmn-quiet-message-preview').isVisible(),true);
             await page.getByRole('button',{name:'미리보기 닫기'}).click();
