@@ -113,7 +113,7 @@ export async function confirmActionResult({
  * changes the server, IndexedDB, or group/library membership. Absence of a
  * file alone cannot prove which actor removed it.
  */
-export async function inspectArchiveStatus({context,record,fetcher=fetch}){
+export async function inspectArchiveStatus({context,record,raw=null,fetcher=fetch}){
     if(!record || !['rename','delete'].includes(record.action))
         throw new Error('검사할 보관 기록이 올바르지 않습니다.');
     const before=context();
@@ -121,6 +121,25 @@ export async function inspectArchiveStatus({context,record,fetcher=fetch}){
         (record.isGroup && String(before.groupId)!==String(record.groupId)))
         throw new Error('원래 캐릭터 또는 그룹을 선택한 뒤 상태를 검사해 주세요.');
     const source={isGroup:record.isGroup,avatar:record.avatar,id:record.name};
+    if(record.state==='restoring'){
+        if(!record.resultName)
+            return {code:'uncertain',message:'복구 대상 파일명이 기록되지 않았습니다. 원본 ZIP으로 수동 점검해 주세요.'};
+        const restored=await getRaw(before,{
+            ...source,id:record.resultName,
+        },fetcher);
+        const after=context();
+        if(buildingScope(after)!==record.scope ||
+            (record.isGroup && String(after.groupId)!==String(record.groupId)))
+            throw new Error('검사 중 캐릭터 또는 그룹이 변경됐습니다.');
+        if(restored===null)
+            return {code:'restore-missing',message:'복구 대상 파일을 찾지 못했습니다. 복구 보관본은 그대로 유지됩니다.'};
+        if(typeof raw!=='string')throw new Error('복구 파일 검증을 위한 원본 사본이 필요합니다.');
+        const matches=sameChatJsonl(raw,restored);
+        return {code:matches?'restore-present':'restore-changed',
+            message:matches
+                ?'복구 파일의 메시지 내용이 보관본과 일치합니다. 그룹 소속·관리 정보 갱신 상태는 따로 확인해 주세요.'
+                :'복구 파일 내용이 보관본과 다릅니다. 수동 점검이 필요합니다.'};
+    }
     const original=await getRaw(before,source,fetcher);
     const originalMatches=original!==null && await hashJsonl(original)===record.hash;
     let target=null,targetMatches=false;
@@ -161,6 +180,8 @@ export async function restoreFromVault({
     vault,context,archiveId,libraryRepository,fetcher=fetch,
 }){
     const {meta,raw}=await vault.read(archiveId);
+    if(meta.state==='restoring')
+        throw new Error('이전 복구가 중단되어 같은 사본으로 중복 생성할 수 없습니다. 서버 상태를 확인해 주세요.');
     const ctx=context();
     if(buildingScope(ctx)!==meta.scope ||
         (meta.isGroup && String(ctx.groupId)!==String(meta.groupId)))
@@ -188,6 +209,13 @@ export async function restoreFromVault({
     if(meta.librarySnapshot){
         libraryCopy=moveLibraryReference(meta.librarySnapshot,meta.scope,meta.name,recovered).library;
     }
+    latest();
+    // A recovery save can partially succeed (file created but not yet linked
+    // to a group). Persist the exact destination *before* writing to ST.
+    await vault.mark(archiveId,'restoring',recovered);
+    const intent=await vault.read(archiveId);
+    if(intent.meta.state!=='restoring' || intent.meta.resultName!==recovered)
+        throw new Error('복구 대상 저장 기록을 확인하지 못했습니다.');
     latest();
     if(meta.isGroup){
         const group=ctx.groups?.find(g=>String(g.id)===String(ctx.groupId));
