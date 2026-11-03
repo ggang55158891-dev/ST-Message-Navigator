@@ -39,7 +39,10 @@ export class BatchFileUI {
         this.status.setAttribute('role','status');
         this.toolbar.append(this.count,this.selectVisible,this.clearButton,
             this.exportButton,this.closeButton,this.status);
-        library.controls.append(this.toolbar);
+        // Quiet deliberately hides the general library-management controls.
+        // Keep the explicitly opened file toolbar as a separate sibling so
+        // it remains accessible without opening unrelated folder/tag editors.
+        library.owner.buildingsPane.insertBefore(this.toolbar,library.owner.contentArea);
     }
     reset(scope=this.library.owner.scope){
         this.controller?.abort();
