@@ -3,7 +3,7 @@
  * the list; raw JSONL is fetched and checksum-verified only for restore/export.
  */
 import {buildingScope} from './building-data.js';
-import {restoreFromVault,archiveAsZip} from './recovery-operations.js';
+import {restoreFromVault,archiveAsZip,inspectArchiveStatus} from './recovery-operations.js';
 import {downloadBackupBlob} from './file-backup.js';
 
 const el=(tag,cls='',text)=>{
@@ -49,6 +49,10 @@ export class RecoveryBinUI {
     }
     async open(){
         if(this.actions.disposed)return;
+        if(this.actions.busy || this.busy){
+            this.owner.view.setStatus('파일 작업이 진행 중입니다. 완료 후 복구 보관함을 열어 주세요.',true);
+            return;
+        }
         if(this.owner.view.root.dataset.elevatorTheme!=='quiet')
             return;
         this.owner.setTab('buildings');
@@ -60,12 +64,13 @@ export class RecoveryBinUI {
         }catch(error){this.status.textContent=error.message;}
         this.panel.scrollIntoView({block:'nearest'});
     }
-    close(){
-        if(this.busy)return;
+    close(force=false){
+        if(this.busy && !force)return;
         this.opened=false;this.panel.hidden=true;
         this.list.replaceChildren();this.status.textContent='';
     }
     async changeRetention(){
+        if(this.busy)return;
         try{
             await this.actions.vault.setRetention(Number(this.retention.value));
             await this.refresh();
@@ -85,8 +90,9 @@ export class RecoveryBinUI {
                 const card=el('article','stmn-bin-entry');
                 card.append(el('strong','',meta.name));
                 const state={
-                    prepared:'작업 준비',uncertain:'결과 확인 필요',
-                    deleted:'삭제 후 보관',renamed:'이름 변경 전 보관',restored:'복구 기록',
+                    prepared:'원본 보관 완료 · 작업 미시작',committing:'작업 도중 중단 또는 확인 대기',
+                    uncertain:'결과 확인 필요',deleted:'삭제 후 보관',
+                    renamed:'이름 변경 전 보관',restored:'복구 기록',
                 }[meta.state]||meta.state;
                 card.append(el('small','',
                     new Date(meta.createdAt).toLocaleString()+' · '+state+' · '+(meta.bytes/1024).toFixed(1)+'KB'));
@@ -100,6 +106,12 @@ export class RecoveryBinUI {
                     '원래 채팅을 덮어쓰지 않고 별도의 새 채팅으로 복구합니다.';
                 const exportButton=btn('원본 ZIP',()=>void this.download(meta.id));
                 const remove=btn('보관본 삭제',()=>void this.remove(meta.id,meta.name));
+                if(['prepared','committing','uncertain'].includes(meta.state)){
+                    const audit=btn('서버 상태 확인',()=>void this.inspect(meta.id));
+                    audit.disabled=meta.scope!==currentScope;
+                    audit.title='읽기 전용으로 원본/변경 대상 파일을 검사합니다.';
+                    buttons.append(audit);
+                }
                 buttons.append(restore,exportButton,remove);
                 card.append(buttons);
                 this.list.append(card);
@@ -118,6 +130,16 @@ export class RecoveryBinUI {
             for(const button of this.panel.querySelectorAll('button,select'))button.disabled=false;
             await this.refresh();
         }
+    }
+    async inspect(id){
+        await this.withBusy(async()=>{
+            const {meta}=await this.actions.vault.read(id);
+            const result=await inspectArchiveStatus({
+                context:this.owner.callbacks.context,record:meta,
+            });
+            this.status.textContent='서버 파일 검사: '+result.message+
+                ' 이 확인은 서버 파일이나 보관 기록을 수정하지 않습니다.';
+        });
     }
     async download(id){
         await this.withBusy(async()=>{
