@@ -66,7 +66,7 @@ export class QuietShell {
                     this.globalMenu.open = false;
                     this.listMenu.open = false;
                     event.stopPropagation();
-                } else if (this.searchOpen && !this.view.editing) {
+                } else if (this.searchOpen && this.view.editing < 0) {
                     this.toggleSearch(false);
                     event.stopPropagation();
                 }
@@ -108,13 +108,16 @@ export class QuietShell {
         this.refresh();
     }
 
-    refresh() {
-        if (!this.root.isConnected && this.elevator.tab == null) return;
-        this.root.dataset.quietSearch = this.searchOpen ? 'open' : 'closed';
-        this.root.dataset.quietManage = this.manageOpen ? 'open' : 'closed';
+    refreshContext() {
         this.context.textContent = this.activeTab === 'buildings'
             ? '채팅 라이브러리'
             : '메시지 ' + (this.view.entries?.length || 0) + '개';
+    }
+
+    refresh() {
+        this.root.dataset.quietSearch = this.searchOpen ? 'open' : 'closed';
+        this.root.dataset.quietManage = this.manageOpen ? 'open' : 'closed';
+        this.refreshContext();
         this.menuContent.replaceChildren();
         if (this.activeTab === 'floors') {
             this.menuContent.append(
