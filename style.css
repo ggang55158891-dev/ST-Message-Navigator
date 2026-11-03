@@ -1627,3 +1627,92 @@
 #stmn-root[data-elevator-theme="quiet"] .stmn-batch-organize :is(select,button):focus-visible {
     outline:2px solid #526859;outline-offset:2px;
 }
+
+
+/* E-03A: opt-in current-scope search overlay. Search results never appear
+ * until an explicit request, and the normal lobby list is left intact. */
+#stmn-root .stmn-chat-search[hidden],
+#stmn-root .stmn-chat-search-cancel[hidden],
+#stmn-root .stmn-chat-search-next[hidden] {display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search:not([hidden]) {
+    box-sizing:border-box;position:absolute;inset:0;z-index:31;
+    display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0;
+    overflow:hidden;padding:13px;
+    background:#fdfdfc;color:#354039;
+    border:1px solid #e6e9e5;border-radius:16px;
+    box-shadow:0 14px 38px #222c2419;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-header {
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    font-size:13px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-close {
+    border:0;border-radius:8px;background:transparent;
+    color:#6d7a70;font-size:20px;padding:0 8px;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-form {
+    display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-input {
+    flex:1 1 100%;width:100%;min-width:0;
+    font:inherit;font-size:12px;color:#354039;background:#f5f7f4;
+    border:1px solid #e2e7df;border-radius:10px;padding:10px 12px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-scopes {
+    flex:1 1 100%;display:flex;align-items:center;flex-wrap:wrap;gap:7px 12px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-search-choice {
+    display:flex;align-items:center;gap:5px;
+    color:#647269;font-size:10px;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-search-choice input {
+    accent-color:#506c57;width:14px;height:14px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search :is(.stmn-chat-search-start,
+    .stmn-chat-search-cancel,.stmn-chat-search-next) {
+    background:#fff;color:#47594b;border:1px solid #dfe5dc;
+    border-radius:9px;padding:7px 11px;cursor:pointer;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search .stmn-chat-search-start {
+    background:#384b3d;border-color:#384b3d;color:#fff;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search :is(button,input):focus-visible {
+    outline:2px solid #728977;outline-offset:2px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-status {
+    margin:0;font-size:10px;line-height:1.6;color:#79867b;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-results {
+    flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;display:flex;flex-direction:column;gap:5px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-results > p {
+    margin:12px 2px;font-size:11px;color:#8d9890;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-result {
+    text-align:left;display:flex;flex-direction:column;align-items:stretch;gap:4px;
+    border:1px solid #eff1ed;border-radius:10px;background:#fff;
+    padding:10px 11px;cursor:pointer;color:#56665a;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-result:hover {
+    background:#f3f5f1;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-result strong {
+    font-size:11px;color:#323c35;font-weight:700;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-result small {
+    font-size:10px;color:#849187;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-result span {
+    max-height:54px;overflow:hidden;
+    font-size:10px;line-height:1.65;white-space:normal;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search .stmn-chat-search-next {
+    flex:none;align-self:flex-start;
+}
+@media(max-width:520px){
+    #stmn-root[data-elevator-theme="quiet"] .stmn-chat-search:not([hidden]) {
+        padding:9px;gap:6px;
+    }
+    #stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-scopes {gap:6px 10px}
+}
