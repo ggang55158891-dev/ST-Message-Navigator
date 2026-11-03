@@ -1,5 +1,5 @@
 /** SillyTavern adapter: library metadata only, lazily accessed on user action. */
-import { changeLibrary } from './library-operations.js';
+import { changeLibrary, moveLibraryReference, forgetLibraryReference } from './library-operations.js';
 import {
     LIBRARY_KEY, validateLibrary, mergeLibrary, librarySummary,
 } from './library-data.js';
@@ -50,6 +50,30 @@ export class LibraryRepository {
             throw error;
         }
         return next;
+    }
+
+    /**
+     * Only called after the chat-file API confirms success. Preserve
+     * unrelated extensions' data and do not replace malformed metadata.
+     */
+    syncFileChange(scope,source,destination=null) {
+        const ctx=this.settingsRoot();
+        const settings=ctx.extensionSettings;
+        if(typeof ctx.saveSettingsDebounced!=='function')
+            throw new Error('SillyTavern 확장 설정 저장 함수를 사용할 수 없습니다.');
+        const previous=settings[LIBRARY_KEY];
+        const operation=destination
+            ? moveLibraryReference(previous,scope,source,destination)
+            : forgetLibraryReference(previous,scope,source);
+        if(!operation.changed)return false;
+        settings[LIBRARY_KEY]=operation.library;
+        try {ctx.saveSettingsDebounced();}
+        catch(error) {
+            if(previous===undefined)delete settings[LIBRARY_KEY];
+            else settings[LIBRARY_KEY]=previous;
+            throw error;
+        }
+        return true;
     }
 
     /**

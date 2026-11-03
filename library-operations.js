@@ -138,3 +138,29 @@ export function libraryRecordChanged(before, after) {
     // Avoid a save for a repeated click choosing an existing value.
     return JSON.stringify(before) !== JSON.stringify(after);
 }
+
+
+/**
+ * Q-07B reference maintenance after confirmed server success.
+ * Detach/validate the entire library; never overwrite a different record.
+ */
+export function moveLibraryReference(existing,scope,fromId,toId) {
+    const lib=validateLibrary(existing);
+    const oldKey=chatReference(scope,fromId),newKey=chatReference(scope,toId);
+    if(oldKey===newKey)return {library:lib,changed:false};
+    if(!Object.prototype.hasOwnProperty.call(lib.records,oldKey))
+        return {library:lib,changed:false};
+    if(Object.prototype.hasOwnProperty.call(lib.records,newKey))
+        throw new Error('변경할 파일 이름에 이미 다른 관리 정보가 저장돼 있습니다. 해당 관리 정보를 덮어쓰지 않았습니다.');
+    lib.records[newKey]=lib.records[oldKey];
+    delete lib.records[oldKey];
+    return {library:validateLibrary(lib),changed:true};
+}
+export function forgetLibraryReference(existing,scope,id) {
+    const lib=validateLibrary(existing);
+    const key=chatReference(scope,id);
+    if(!Object.prototype.hasOwnProperty.call(lib.records,key))
+        return {library:lib,changed:false};
+    delete lib.records[key];
+    return {library:validateLibrary(lib),changed:true};
+}

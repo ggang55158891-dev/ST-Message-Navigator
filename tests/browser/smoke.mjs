@@ -436,6 +436,100 @@ async function run() {
             assert.equal(await page.locator('.stmn-outline-jumps').isVisible(), false);
         });
 
+        await check('Q07B backup-gated inactive-chat rename requires exact name and keeps active chat safe',async setup=>{
+            const page=await setup(3);
+            const calls=[];
+            await page.route('**/api/chats/export',async route=>{
+                calls.push({endpoint:'export',body:route.request().postDataJSON()});
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:'{"chat_metadata":{}}\n{"mes":"backup text"}\n'})});
+            });
+            await page.route('**/api/chats/rename',async route=>{
+                const data=route.request().postDataJSON();
+                calls.push({endpoint:'rename',body:data});
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({ok:true,sanitizedFileName:data.renamed_file.replace(/\.jsonl$/,'')})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnContext.eventSource={emit:async()=>{}};
+                window.__stmnContext.eventTypes={CHAT_RENAMED:'renamed'};
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const active=page.locator('.stmn-library-card').first();
+            await active.locator('.stmn-quiet-item-menu summary').click();
+            assert.equal(await active.getByRole('button',{name:'파일 이름 변경 · 백업 후'}).isDisabled(),true);
+            await active.locator('.stmn-quiet-item-menu summary').click();
+            const inactive=page.locator('.stmn-library-card').nth(1);
+            await inactive.locator('.stmn-quiet-item-menu summary').click();
+            const downloadPromise=page.waitForEvent('download');
+            await inactive.getByRole('button',{name:'파일 이름 변경 · 백업 후'}).click();
+            const backup=await downloadPromise;
+            assert.ok(backup.suggestedFilename().includes('Before-Rename'));
+            const panel=page.locator('.stmn-file-action');
+            await panel.waitFor({state:'visible'});
+            const apply=panel.getByRole('button',{name:'파일 이름 변경'});
+            assert.equal(await apply.isEnabled(),false);
+            assert.equal(calls.filter(x=>x.endpoint==='rename').length,0,
+                'Backup and panel opening must not rename the file');
+            await panel.getByRole('textbox',{name:'새 채팅 파일 이름'}).fill('새로운 이름');
+            await panel.getByRole('checkbox',{name:'ZIP 백업 파일 확인'}).check();
+            await panel.getByRole('textbox',{name:'기존 채팅 파일명 확인'}).fill('wrong');
+            assert.equal(await apply.isEnabled(),false);
+            await panel.getByRole('textbox',{name:'기존 채팅 파일명 확인'}).fill('chat-b');
+            assert.equal(await apply.isEnabled(),true);
+            await apply.click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-file-action')?.hidden===true);
+            const rename=calls.find(x=>x.endpoint==='rename');
+            assert.ok(rename,'Expected a single confirmed backend rename');
+            assert.deepEqual(rename.body,{is_group:false,avatar_url:'none',
+                original_file:'chat-b.jsonl',renamed_file:'새로운 이름.jsonl'});
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chat.length),3);
+            assert.equal(calls.filter(x=>x.endpoint==='rename').length,1);
+        });
+
+        await check('Q07B guarded deletion refuses active chat, requires backup and fails safely on server 503',async setup=>{
+            const page=await setup(3);
+            const calls=[];
+            await page.route('**/api/chats/export',async route=>{
+                calls.push('backup');
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:'{"chat_metadata":{}}\n{"mes":"backup"}\n'})});
+            });
+            await page.route('**/api/chats/delete',async route=>{
+                calls.push('delete');
+                await route.fulfill({status:503,contentType:'application/json',
+                    body:JSON.stringify({error:true})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const inactive=page.locator('.stmn-library-card').nth(1);
+            await inactive.locator('.stmn-quiet-item-menu summary').click();
+            const dl=page.waitForEvent('download');
+            await inactive.getByRole('button',{name:'파일 삭제 · 백업 후'}).click();
+            await dl;
+            const panel=page.locator('.stmn-file-action');
+            await panel.waitFor({state:'visible'});
+            const apply=panel.getByRole('button',{name:'파일 영구 삭제'});
+            assert.equal(await apply.isEnabled(),false);
+            assert.deepEqual(calls,['backup']);
+            await panel.getByRole('checkbox',{name:'ZIP 백업 파일 확인'}).check();
+            await panel.getByRole('textbox',{name:'기존 채팅 파일명 확인'}).fill('chat-b');
+            assert.equal(await apply.isEnabled(),true);
+            await apply.click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-file-action')?.hidden===true);
+            assert.deepEqual(calls,['backup','delete']);
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chat.length),3);
+        });
+
         await check('Q07A explicit multi-select ZIP preserves raw JSONL and skips any file writes', async setup => {
             const page=await setup(3);
             const calls=[];

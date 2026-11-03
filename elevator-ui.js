@@ -105,7 +105,10 @@ export class ElevatorPanel {
         const skyModes = ['auto', 'day', 'night'];
         this.view.root.dataset.elevatorTheme = ELEVATOR_THEMES.includes(theme) ? theme : 'classic';
         this.view.root.dataset.elevatorSky = skyModes.includes(skyMode) ? skyMode : 'auto';
-        if (this.view.root.dataset.elevatorTheme !== 'quiet') this.libraryUI.previewUI.closeDetail();
+        if (this.view.root.dataset.elevatorTheme !== 'quiet') {
+            this.libraryUI.previewUI.closeDetail();
+            this.libraryUI.fileActions.dismissOnNavigation();
+        }
         this.libraryUI.previewUI.hideTooltip();
         this.quiet?.refresh();
         if (this.tab === 'buildings' && this.libraryUI?.data && this.view.panelOpen) {
@@ -133,7 +136,11 @@ export class ElevatorPanel {
     setTab(tab) {
         this.tab = tab === 'buildings' ? 'buildings' : 'floors';
         const buildings = this.tab === 'buildings';
-        if (!buildings) { this.libraryUI.previewUI.closeDetail(); this.libraryUI.previewUI.hideTooltip(); }
+        if (!buildings) {
+            this.libraryUI.previewUI.closeDetail();
+            this.libraryUI.previewUI.hideTooltip();
+            this.libraryUI.fileActions.dismissOnNavigation();
+        }
         this.floorTab.setAttribute('aria-selected', String(!buildings));
         this.buildingTab.setAttribute('aria-selected', String(buildings));
         this.floorTab.classList.toggle('stmn-elevator-active-tab', !buildings);
@@ -234,6 +241,7 @@ export class ElevatorPanel {
     }
 
     onChatChanged() {
+        this.libraryUI.fileActions.dismissOnNavigation();
         this.updateFloor(-1);
         this.lastLoaded = 0;
         if (this.tab === 'buildings' && this.view.panelOpen) void this.refreshBuildings(true);
