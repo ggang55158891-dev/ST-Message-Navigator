@@ -159,8 +159,8 @@ export class RecoveryVault {
             return rows.filter(validEntry).sort((a,b)=>b.createdAt-a.createdAt);
         }finally{db.close();}
     }
-    async mark(id,state,resultName=null){
-        if(!['deleted','renamed','uncertain','restored'].includes(state))
+    async mark(id,state,resultName=undefined){
+        if(!['committing','deleted','renamed','uncertain','restored'].includes(state))
             throw new Error('보관함 상태 변경이 올바르지 않습니다.');
         const db=await this.open();
         try{
@@ -169,7 +169,15 @@ export class RecoveryVault {
             const store=tx.objectStore('entries');
             const previous=await request(store.get(id));
             if(!validEntry(previous))throw new Error('보관할 기록을 찾지 못했습니다.');
-            store.put({...previous,state,resultName});
+            // Record intent durably *before* an irreversible server request.
+            // An interrupted "committing" record is never automatically pruned.
+            if(state==='committing' && previous.state!=='prepared')
+                throw new Error('이미 진행된 파일 작업을 다시 시작할 수 없습니다.');
+            if(state==='committing' && previous.action==='rename' &&
+                (typeof resultName!=='string' || !resultName || resultName.length>120))
+                throw new Error('이름 변경 대상을 보관함에 기록할 수 없습니다.');
+            store.put({...previous,state,
+                resultName:resultName===undefined?previous.resultName:resultName});
             await done;
         }finally{db.close();}
     }
