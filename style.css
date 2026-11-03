@@ -1474,3 +1474,66 @@
     #stmn-root[data-elevator-theme="quiet"] .stmn-batch-toolbar:not([hidden]){gap:6px;padding:8px}
     #stmn-root[data-elevator-theme="quiet"] .stmn-batch-checkbox{margin-left:5px}
 }
+
+
+/* Q-07B. Backup first, typed confirmation for destructive file actions.
+ * Independent from Quiet's normally hidden folder/tag management box. */
+#stmn-root .stmn-file-action[hidden] {display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action:not([hidden]) {
+    display:flex;flex-direction:column;gap:10px;flex:none;
+    margin:3px 5px 10px;padding:17px;
+    border:1px solid #e5e6e3;border-radius:14px;
+    background:#f9f9f7;color:#373d38;
+    font:12px/1.65 system-ui,-apple-system,"Malgun Gothic",sans-serif;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-title {
+    font-size:14px;font-weight:750;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-help {
+    font-size:11px;line-height:1.7;
+    color:#6f7771;margin:0;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-rename {
+    display:flex;flex-direction:column;gap:5px;font-size:11px;
+    color:#535c55;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-rename[hidden] {display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-rename input {
+    box-sizing:border-box;width:100%;min-width:0;
+    border:1px solid #dfe2de;border-radius:9px;
+    background:#fff;color:#303731;padding:9px 11px;font:inherit;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-ack {
+    display:flex;align-items:start;gap:9px;cursor:pointer;
+    font-size:11px;color:#4e5d52;line-height:1.55;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-ack input {
+    margin:3px 0 0;accent-color:#637f69;flex:0 0 auto;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-error {
+    color:#9d3535;font-size:11px;margin:0;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-error:empty {display:none}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-buttons {
+    display:flex;align-items:center;justify-content:end;gap:7px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-buttons button {
+    padding:8px 13px;border:1px solid #e1e5e0;border-radius:9px;
+    font:inherit;font-weight:650;cursor:pointer;
+    background:#fff;color:#455147;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-buttons .stmn-file-action-submit {
+    background:#404c42;color:#fff;border-color:#404c42;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-buttons button:disabled {
+    opacity:.4;cursor:default;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-menu-danger {
+    color:#af5656;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-item-menu button:disabled {
+    opacity:.4;cursor:not-allowed;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action :is(input,button):focus-visible {
+    outline:2px solid #56705b;outline-offset:2px;
+}
