@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     DATA_KEY, MESSAGE_KEY, isNavigable, findTarget, automaticTitle,
-    getTitle, isCustomTitle, assignCustomTitle,
+    getTitle, isCustomTitle, assignCustomTitle, isMessageBookmarked, setMessageBookmark,
 } from '../model.js';
 
 const messages = [
@@ -74,4 +74,35 @@ test('reset title returns to automatic and keeps the body intact', () => {
     assignCustomTitle(chat, metadata, 0, '');
     assert.equal(getTitle(chat[0], metadata), '본문입니다.');
     assert.equal(chat[0].mes, '본문입니다. 기타 설명.');
+});
+
+
+test('message bookmarks survive index shift, preserve bodies and existing titles', () => {
+    const chat=structuredClone(messages);
+    const metadata={};
+    assignCustomTitle(chat,metadata,3,'기존 제목',()=> 'kept-id');
+    const before=chat[3].mes;
+    assert.equal(setMessageBookmark(chat,metadata,3,true,()=> 'other-id'),true);
+    assert.equal(isMessageBookmarked(chat[3],metadata),true);
+    assert.equal(chat[3].mes,before);
+    assert.equal(getTitle(chat[3],metadata),'기존 제목');
+    chat.splice(1,1);
+    assert.equal(isMessageBookmarked(chat[2],metadata),true);
+    assert.equal(setMessageBookmark(chat,metadata,2,false),true);
+    assert.equal(isMessageBookmarked(chat[2],metadata),false);
+    assert.equal(getTitle(chat[2],metadata),'기존 제목');
+    assert.equal(setMessageBookmark(chat,metadata,2,false),false);
+});
+
+test('bookmarks deconflict duplicate IDs and never share a cloned message favorite', () => {
+    const chat=[{mes:'A'}, {mes:'B'}];
+    const metadata={};
+    setMessageBookmark(chat,metadata,0,true,()=> 'uid1');
+    chat[1][MESSAGE_KEY]=chat[0][MESSAGE_KEY];
+    // Duplicate ID is deconflicted on the first explicit state change.
+    assert.equal(isMessageBookmarked(chat[1],metadata),true);
+    assert.equal(setMessageBookmark(chat,metadata,1,false),true);
+    assert.equal(isMessageBookmarked(chat[0],metadata),true);
+    // No mutation of the original's bookmark is allowed.
+    assert.equal(metadata[DATA_KEY].bookmarks.uid1,true);
 });
