@@ -1537,3 +1537,68 @@
 #stmn-root[data-elevator-theme="quiet"] .stmn-file-action :is(input,button):focus-visible {
     outline:2px solid #56705b;outline-offset:2px;
 }
+
+
+/* Q-07C — isolated, lazy recovery bin in Quiet lobby. */
+#stmn-root .stmn-recovery-bin[hidden]{display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-recovery-bin:not([hidden]){
+    display:flex;flex-direction:column;gap:12px;flex:none;
+    margin:4px 5px 12px;padding:15px 16px;
+    border:1px solid #e8eae7;border-radius:17px;
+    background:#fafaf9;color:#38413b;
+    font:12px/1.55 system-ui,-apple-system,"Malgun Gothic",sans-serif;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-header strong{font-size:17px}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-note,
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-status{
+    font-size:11px;color:#778078;margin:0;line-height:1.6;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-controls{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-controls label {
+    display:flex;align-items:center;gap:9px;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-controls select {
+    border:1px solid #e2e6e1;border-radius:8px;padding:6px 9px;
+    color:#4b584e;background:white;font:inherit;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-list{
+    display:flex;flex-direction:column;gap:8px;
+    max-height:min(430px,47vh);overflow-y:auto;overscroll-behavior:contain;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-entry{
+    display:flex;flex-direction:column;gap:4px;
+    padding:12px;border:1px solid #e9ebe7;background:#fff;border-radius:11px;min-width:0;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-entry strong{
+    font-size:12px;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-entry small{
+    font-size:10px;color:#849188;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-item-actions{
+    display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-button{
+    cursor:pointer;display:inline-flex;align-items:center;
+    border:1px solid #e4e8e2;border-radius:8px;
+    background:#f6f7f5;color:#4d5a50;
+    font:inherit;font-size:10px;padding:6px 10px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-button:disabled{
+    cursor:not-allowed;opacity:.38;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-button:hover:not(:disabled){background:#eaefea}
+#stmn-root[data-elevator-theme="quiet"] .stmn-bin-empty{
+    color:#969e97;text-align:center;padding:18px;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-recovery-bin :is(button,select):focus-visible {
+    outline:2px solid #4d7454;outline-offset:2px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-file-action-buttons .stmn-file-action-submit:not(:disabled) {
+    background:#414e44;color:white;
+}

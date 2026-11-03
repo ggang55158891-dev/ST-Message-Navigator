@@ -112,6 +112,10 @@ async function setupPage(browser, baseURL, messageCount = 23, size = { width: 12
             },
             getTheme: () => 'classic',
             getSkyMode: () => 'auto',
+            libraryRepository: {
+                read:()=>({schemaVersion:2,records:{},folders:[],tags:[]}),
+                importAdditively:()=>({changed:false}),
+            },
             currentLibraryScope: () => {
                 const ctx=window.__stmnContext;
                 return ctx.groupId != null && ctx.groupId !== ''
@@ -436,71 +440,106 @@ async function run() {
             assert.equal(await page.locator('.stmn-outline-jumps').isVisible(), false);
         });
 
-        await check('Q07B backup-gated inactive-chat rename requires exact name and keeps active chat safe',async setup=>{
+        await check('Q07C rename uses one name field, verified IndexedDB archive, and can recover a separate new chat', async setup=>{
             const page=await setup(3);
+            const raw='{"chat_metadata":{}}\n{"mes":"원본 본문","swipes":["첫번째","둘째"]}\n';
+            const files=new Map([['chat-b',raw]]);
             const calls=[];
             await page.route('**/api/chats/export',async route=>{
-                calls.push({endpoint:'export',body:route.request().postDataJSON()});
+                const data=route.request().postDataJSON();
+                const id=data.file.replace(/\.jsonl$/,'');
+                calls.push({action:'read',id});
+                if(!files.has(id)){
+                    await route.fulfill({status:404,contentType:'application/json',body:'{}'});
+                    return;
+                }
                 await route.fulfill({status:200,contentType:'application/json',
-                    body:JSON.stringify({result:'{"chat_metadata":{}}\n{"mes":"backup text"}\n'})});
+                    body:JSON.stringify({result:files.get(id)})});
             });
             await page.route('**/api/chats/rename',async route=>{
                 const data=route.request().postDataJSON();
-                calls.push({endpoint:'rename',body:data});
+                const from=data.original_file.replace(/\.jsonl$/,'');
+                const to=data.renamed_file.replace(/\.jsonl$/,'');
+                calls.push({action:'rename',from,to});
+                if(!files.has(from) || files.has(to)){
+                    await route.fulfill({status:400,contentType:'application/json',body:'{}'});return;
+                }
+                files.set(to,files.get(from));files.delete(from);
                 await route.fulfill({status:200,contentType:'application/json',
-                    body:JSON.stringify({ok:true,sanitizedFileName:data.renamed_file.replace(/\.jsonl$/,'')})});
+                    body:JSON.stringify({ok:true,sanitizedFileName:to})});
+            });
+            await page.route('**/api/chats/save',async route=>{
+                const data=route.request().postDataJSON();
+                calls.push({action:'restore',id:data.file_name});
+                files.set(data.file_name,data.chat.map(x=>JSON.stringify(x)).join('\n'));
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({ok:true})});
             });
             await page.evaluate(()=>{
-                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
-                window.__stmnContext.eventSource={emit:async()=>{}};
-                window.__stmnContext.eventTypes={CHAT_RENAMED:'renamed'};
+                const ctx=window.__stmnContext;
+                ctx.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                ctx.eventSource={emit:async()=>{}};
+                ctx.eventTypes={CHAT_RENAMED:'renamed'};
                 window.__stmnView.elevator.applyTheme('quiet','auto');
             });
             await page.locator('[data-action="outline"]').click();
             await page.getByRole('tab',{name:'건물 로비'}).click();
-            const active=page.locator('.stmn-library-card').first();
-            await active.locator('.stmn-quiet-item-menu summary').click();
-            assert.equal(await active.getByRole('button',{name:'파일 이름 변경 · 백업 후'}).isDisabled(),true);
-            await active.locator('.stmn-quiet-item-menu summary').click();
+            const first=page.locator('.stmn-library-card').first();
+            await first.locator('.stmn-quiet-item-menu summary').click();
+            assert.equal(await first.getByRole('button',{name:'파일 이름 변경'}).isDisabled(),true);
+            await first.locator('.stmn-quiet-item-menu summary').click();
             const inactive=page.locator('.stmn-library-card').nth(1);
             await inactive.locator('.stmn-quiet-item-menu summary').click();
-            const downloadPromise=page.waitForEvent('download');
-            await inactive.getByRole('button',{name:'파일 이름 변경 · 백업 후'}).click();
-            const backup=await downloadPromise;
-            assert.ok(backup.suggestedFilename().includes('Before-Rename'));
+            await inactive.getByRole('button',{name:'파일 이름 변경'}).click();
             const panel=page.locator('.stmn-file-action');
             await panel.waitFor({state:'visible'});
-            const apply=panel.getByRole('button',{name:'파일 이름 변경'});
-            assert.equal(await apply.isEnabled(),false);
-            assert.equal(calls.filter(x=>x.endpoint==='rename').length,0,
-                'Backup and panel opening must not rename the file');
+            assert.equal(await panel.getByRole('checkbox').count(),0);
+            assert.equal(await panel.getByRole('textbox',{name:'기존 채팅 파일명 확인'}).count(),0);
+            const rename=panel.getByRole('button',{name:'이름 변경'});
+            assert.equal(await rename.isEnabled(),false);
+            assert.equal(calls.length,0,'No server reads or file writes before confirmation');
             await panel.getByRole('textbox',{name:'새 채팅 파일 이름'}).fill('새로운 이름');
-            await panel.getByRole('checkbox',{name:'ZIP 백업 파일 확인'}).check();
-            await panel.getByRole('textbox',{name:'기존 채팅 파일명 확인'}).fill('wrong');
-            assert.equal(await apply.isEnabled(),false);
-            await panel.getByRole('textbox',{name:'기존 채팅 파일명 확인'}).fill('chat-b');
-            assert.equal(await apply.isEnabled(),true);
-            await apply.click();
+            await rename.click();
             await page.waitForFunction(()=>document.querySelector('.stmn-file-action')?.hidden===true);
-            const rename=calls.find(x=>x.endpoint==='rename');
-            assert.ok(rename,'Expected a single confirmed backend rename');
-            assert.deepEqual(rename.body,{is_group:false,avatar_url:'none',
-                original_file:'chat-b.jsonl',renamed_file:'새로운 이름.jsonl'});
+            assert.deepEqual(calls.filter(x=>x.action==='rename'),
+                [{action:'rename',from:'chat-b',to:'새로운 이름'}]);
+            assert.equal(files.has('chat-b'),false);
+            assert.equal(files.get('새로운 이름'),raw);
             assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
-            assert.equal(await page.evaluate(()=>window.__stmnContext.chat.length),3);
-            assert.equal(calls.filter(x=>x.endpoint==='rename').length,1);
+            // Every modification archives first and verifies the server result.
+            assert.deepEqual(calls.slice(0,3).map(x=>x.action),['read','read','rename']);
+            await page.locator('.stmn-quiet-global summary').click();
+            await page.getByRole('button',{name:'복구 보관함'}).click();
+            await page.locator('.stmn-recovery-bin').waitFor({state:'visible'});
+            await page.locator('.stmn-bin-entry').first().waitFor({state:'visible'});
+            assert.equal(await page.locator('.stmn-bin-entry').count(),1);
+            const vaultMeta=await page.evaluate(async()=>{
+                const mod=await import('/recovery-vault.js');
+                const vault=new mod.RecoveryVault();
+                const all=await vault.list();
+                const archived=await vault.read(all[0].id);
+                return {state:all[0].state,raw:archived.raw,hash:archived.meta.hash};
+            });
+            assert.equal(vaultMeta.state,'renamed');
+            assert.equal(vaultMeta.raw,raw);
+            assert.equal(vaultMeta.hash.length,64);
+            await page.locator('.stmn-bin-entry').getByRole('button',{name:'복구본 만들기'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-bin-status')?.textContent.includes('새 채팅'));
+            const restoredName=[...files.keys()].find(x=>x.includes('restored'));
+            assert.ok(restoredName,'Restoration should create a unique new chat instead of replacing renamed one');
+            assert.equal(files.get('새로운 이름'),raw);
+            assert.deepEqual(JSON.parse(files.get(restoredName).split('\n')[1]).swipes,['첫번째','둘째']);
         });
 
-        await check('Q07B guarded deletion refuses active chat, requires backup and fails safely on server 503',async setup=>{
+        await check('Q07C single delete confirmation preserves archive on a 503 failure',async setup=>{
             const page=await setup(3);
-            const calls=[];
+            let deletes=0;
             await page.route('**/api/chats/export',async route=>{
-                calls.push('backup');
                 await route.fulfill({status:200,contentType:'application/json',
                     body:JSON.stringify({result:'{"chat_metadata":{}}\n{"mes":"backup"}\n'})});
             });
             await page.route('**/api/chats/delete',async route=>{
-                calls.push('delete');
+                deletes++;
                 await route.fulfill({status:503,contentType:'application/json',
                     body:JSON.stringify({error:true})});
             });
@@ -512,22 +551,57 @@ async function run() {
             await page.getByRole('tab',{name:'건물 로비'}).click();
             const inactive=page.locator('.stmn-library-card').nth(1);
             await inactive.locator('.stmn-quiet-item-menu summary').click();
-            const dl=page.waitForEvent('download');
-            await inactive.getByRole('button',{name:'파일 삭제 · 백업 후'}).click();
-            await dl;
+            await inactive.getByRole('button',{name:'파일 삭제'}).click();
             const panel=page.locator('.stmn-file-action');
             await panel.waitFor({state:'visible'});
-            const apply=panel.getByRole('button',{name:'파일 영구 삭제'});
-            assert.equal(await apply.isEnabled(),false);
-            assert.deepEqual(calls,['backup']);
-            await panel.getByRole('checkbox',{name:'ZIP 백업 파일 확인'}).check();
-            await panel.getByRole('textbox',{name:'기존 채팅 파일명 확인'}).fill('chat-b');
-            assert.equal(await apply.isEnabled(),true);
-            await apply.click();
+            assert.equal(await panel.getByRole('textbox').count(),0);
+            assert.equal(await panel.getByRole('checkbox').count(),0);
+            assert.equal(deletes,0);
+            await panel.getByRole('button',{name:'삭제',exact:true}).click();
             await page.waitForFunction(()=>document.querySelector('.stmn-file-action')?.hidden===true);
-            assert.deepEqual(calls,['backup','delete']);
+            assert.equal(deletes,1);
+            const archive=await page.evaluate(async()=>{
+                const {RecoveryVault}=await import('/recovery-vault.js');
+                const vault=new RecoveryVault();const rows=await vault.list();
+                return {state:rows[0]?.state,raw:(await vault.read(rows[0].id)).raw};
+            });
+            assert.equal(archive.state,'uncertain','Uncertain deletion must keep a recovery copy');
+            assert.ok(archive.raw.includes('"mes":"backup"'));
             assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
-            assert.equal(await page.evaluate(()=>window.__stmnContext.chat.length),3);
+            await page.locator('.stmn-quiet-global summary').click();
+            await page.getByRole('button',{name:'복구 보관함'}).click();
+            await page.locator('.stmn-bin-entry').first().waitFor({state:'visible'});
+            assert.ok(await page.locator('.stmn-bin-entry').first().innerText().then(x=>x.includes('결과 확인 필요')));
+            await page.locator('.stmn-bin-entry').getByRole('button',{name:'서버 상태 확인'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-bin-status')?.textContent.includes('원본 파일'));
+            assert.equal(deletes,1,'read-only audit must never retry deletion');
+        });
+
+        await check('Q07C IndexedDB unavailable means file deletion is NEVER called',async setup=>{
+            const page=await setup(3);
+            let deletes=0;
+            await page.route('**/api/chats/export',async route=>{
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:'{"chat_metadata":{}}\n{"mes":"backup"}\n'})});
+            });
+            await page.route('**/api/chats/delete',async route=>{
+                deletes++;
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({ok:true})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+                Object.defineProperty(window,'indexedDB',{value:undefined,configurable:true});
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const inactive=page.locator('.stmn-library-card').nth(1);
+            await inactive.locator('.stmn-quiet-item-menu summary').click();
+            await inactive.getByRole('button',{name:'파일 삭제'}).click();
+            await page.locator('.stmn-file-action').getByRole('button',{name:'삭제',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-file-action')?.hidden===true);
+            assert.equal(deletes,0);
         });
 
         await check('Q07A explicit multi-select ZIP preserves raw JSONL and skips any file writes', async setup => {
