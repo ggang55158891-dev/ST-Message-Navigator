@@ -98,8 +98,9 @@ export function setSwipeAnnotation(chat, metadata, index, swipeIndex, patch, idF
         throw new Error('유효한 스와이프 번호를 선택해 주세요.');
     }
     if(!patch || typeof patch!=='object' || Array.isArray(patch) ||
-       !['favorite','tags'].every(k=>!Object.hasOwn(patch,k) ||
-           (k==='favorite'?typeof patch.favorite==='boolean':Array.isArray(patch.tags)))) {
+       !Object.keys(patch).every(k=>
+           k==='favorite' ? typeof patch.favorite==='boolean'
+               : k==='tags' ? Array.isArray(patch.tags) : false)) {
         throw new Error('스와이프 즐겨찾기 또는 태그 입력이 올바르지 않습니다.');
     }
     const hasFavorite=Object.hasOwn(patch,'favorite');
