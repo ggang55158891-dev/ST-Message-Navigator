@@ -186,6 +186,46 @@ async function run() {
             assert.match(await page.locator('.stmn-elevator-building').innerText(), /chat-b/);
         });
 
+        await check('Quiet opt-in shell keeps search, grouping and chat switching functional', async setup => {
+            const page = await setup(23);
+            await page.locator('[data-action="outline"]').click();
+            assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(), false,
+                'Existing themes must preserve existing layout');
+            await page.evaluate(() => window.__stmnView.elevator.applyTheme('quiet','auto'));
+            await page.locator('.stmn-quiet-toolbar').waitFor({state:'visible'});
+            assert.equal(await page.locator('.stmn-search-input').isVisible(), false);
+            await page.getByRole('button',{name:'검색 열기'}).click();
+            await page.locator('.stmn-search-input').fill('#4');
+            assert.equal(await page.locator('.stmn-row').count(),1);
+            await page.getByRole('button',{name:'검색 열기'}).click();
+            assert.equal(await page.locator('.stmn-search-input').isVisible(),false);
+            assert.equal(await page.locator('.stmn-search-input').inputValue(),'');
+            await page.getByLabel('목록 메뉴').click();
+            await page.locator('.stmn-quiet-list-menu').getByRole('button',{name:'모두 접기'}).click();
+            assert.equal(await page.locator('.stmn-row').count(),0);
+            await page.getByLabel('목록 메뉴').click();
+            await page.locator('.stmn-quiet-list-menu').getByRole('button',{name:'모두 펼치기'}).click();
+            assert.ok(await page.locator('.stmn-row').count()>0);
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-building-card').first().waitFor();
+            assert.equal(await page.locator('.stmn-building-controls').isVisible(),false);
+            await page.getByLabel('목록 메뉴').click();
+            await page.locator('.stmn-quiet-sort').selectOption('name');
+            assert.equal(await page.locator('.stmn-building-sort').inputValue(),'name');
+            await page.getByLabel('목록 메뉴').click();
+            await page.locator('.stmn-quiet-list-menu').getByRole('button',{name:'폴더·태그 관리'}).click();
+            await page.locator('.stmn-library-controls').waitFor({state:'visible'});
+            await page.getByRole('button',{name:'검색 열기'}).click();
+            await page.locator('.stmn-building-search').fill('건물 B');
+            assert.equal(await page.locator('.stmn-building-card').count(),1);
+            await page.locator('.stmn-building-card').first().click();
+            await page.waitForFunction(()=>window.__stmnContext.chatId==='chat-b');
+            assert.equal(await page.getByRole('tab',{name:'층 안내'}).getAttribute('aria-selected'),'true');
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('classic','auto'));
+            assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(),false);
+            assert.equal(await page.locator('.stmn-search').isVisible(),true);
+        });
+
         await check('dragging moves nav without activating its button', async setup => {
             const page = await setup(23);
             const outline = page.locator('[data-action="outline"]');
