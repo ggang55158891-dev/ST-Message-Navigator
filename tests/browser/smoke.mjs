@@ -112,6 +112,12 @@ async function setupPage(browser, baseURL, messageCount = 23, size = { width: 12
             },
             getTheme: () => 'classic',
             getSkyMode: () => 'auto',
+            currentLibraryScope: () => {
+                const ctx=window.__stmnContext;
+                return ctx.groupId != null && ctx.groupId !== ''
+                    ? 'group:'+ctx.groupId
+                    : 'character:'+String(ctx.characters?.[ctx.characterId]?.avatar || ctx.characterId);
+            },
         };
         window.__stmnView = new NavigatorView(callbacks);
         window.__stmnView.setActive(0);
@@ -428,6 +434,83 @@ async function run() {
             assert.equal(end.chatScroll, 0);
             await page.getByRole('tab', { name: '건물 로비' }).click();
             assert.equal(await page.locator('.stmn-outline-jumps').isVisible(), false);
+        });
+
+        await check('Q07A explicit multi-select ZIP preserves raw JSONL and skips any file writes', async setup => {
+            const page=await setup(3);
+            const calls=[];
+            await page.route('**/api/chats/export',async route=>{
+                const payload=route.request().postDataJSON();
+                calls.push(payload);
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:'{"chat_metadata":{}}\n{"mes":"'+payload.file+' 내용"}\n'})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({
+                    'Content-Type':'application/json','X-CSRF-Token':'mock',
+                });
+                window.__stmnContext.saveChat=async()=>{
+                    window.__q07SaveCalls=(window.__q07SaveCalls||0)+1;
+                    return true;
+                };
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-library-card').first().waitFor();
+            assert.equal(await page.locator('.stmn-batch-checkbox').count(),0,
+                'Ordinary Quiet view must remain minimal without batch checkboxes');
+            const second=page.locator('.stmn-library-card').nth(1);
+            await second.locator('.stmn-quiet-item-menu summary').click();
+            await second.getByRole('button',{name:'파일 작업 · 선택 / 원본 백업'}).click();
+            assert.equal(await page.locator('.stmn-batch-checkbox').count(),2);
+            assert.equal(await page.locator('.stmn-batch-checkbox:checked').count(),1);
+            await page.getByRole('checkbox',{name:'건물 A 선택'}).check();
+            assert.equal(await page.locator('.stmn-batch-count').textContent(),'2개 선택');
+            const downloadPromise=page.waitForEvent('download',{timeout:5000}).catch(()=>null);
+            await page.getByRole('button',{name:'원본 백업 ZIP'}).click();
+            await page.waitForTimeout(500);
+            const status=await page.locator('.stmn-batch-status').textContent();
+            const download=await downloadPromise;
+            assert.ok(download,'ZIP 다운로드가 시작되지 않았습니다. UI 상태: '+status+
+                ' / API 호출: '+JSON.stringify(calls));
+            assert.ok(download.suggestedFilename().endsWith('.zip'));
+            const file=await readFile(await download.path());
+            assert.equal(file.readUInt32LE(0),0x04034b50);
+            const tail=file.length-22;
+            assert.equal(file.readUInt32LE(tail),0x06054b50);
+            assert.equal(file.readUInt16LE(tail+10),2);
+            assert.deepEqual(calls.map(x=>x.file).sort(),['chat-a.jsonl','chat-b.jsonl']);
+            assert.ok(calls.every(x=>x.format==='jsonl' && x.is_group===false));
+            assert.equal(await page.evaluate(()=>window.__q07SaveCalls),1,
+                'The active chat must flush pending content using ST before export');
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chat.length),3);
+            await page.getByRole('button',{name:'완료'}).click();
+            assert.equal(await page.locator('.stmn-batch-toolbar').isVisible(),false);
+            assert.equal(await page.locator('.stmn-batch-checkbox').count(),0);
+        });
+
+        await check('Q07A failed export leaves selection and chat untouched without creating a download', async setup => {
+            const page=await setup(3);
+            await page.route('**/api/chats/export',async route=>{
+                await route.fulfill({status:404,contentType:'application/json',
+                    body:JSON.stringify({message:'not found'})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-library-card').nth(1).locator('.stmn-quiet-item-menu summary').click();
+            await page.locator('.stmn-library-card').nth(1)
+                .getByRole('button',{name:'파일 작업 · 선택 / 원본 백업'}).click();
+            await page.getByRole('button',{name:'원본 백업 ZIP'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-batch-status')?.textContent.includes('404'));
+            assert.equal(await page.locator('.stmn-batch-checkbox:checked').count(),1);
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+            assert.equal(await page.locator('.stmn-batch-toolbar').isVisible(),true);
         });
 
         await check('Q06 native message toolbar saves favorites/tags, filters, compares and selects swipe', async setup => {
