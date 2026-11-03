@@ -74,6 +74,27 @@ export class NavigationCursor {
     }
 }
 
+/**
+ * Does the reader currently sit past the beginning of the selected message?
+ * The same +12px alignment is used by scrollToMessage(). A margin of 24px
+ * avoids treating tiny theme/layout shifts as a deliberate in-message scroll.
+ * Only the message and its scrollport are measured; no global page scrolling.
+ */
+export function isPastMessageStart(chatElement, element, tolerance = 24) {
+    if (!chatElement || !element) return false;
+    const viewport = chatElement.getBoundingClientRect();
+    const rect = element.getBoundingClientRect();
+    if (rect.height < 1 || !Number.isFinite(rect.top) || !Number.isFinite(viewport.top)) return false;
+    const aligned = viewport.top + (chatElement.clientTop || 0) + 12;
+    return rect.top < aligned - tolerance;
+}
+
+/** Whether an additional "next" / "last" press can reach the chat end. */
+export function canScrollToChatBottom(chatElement, tolerance = 3) {
+    if (!chatElement) return false;
+    return chatElement.scrollHeight - chatElement.clientHeight - chatElement.scrollTop > tolerance;
+}
+
 export function scrollToMessage(chatElement, element) {
     if (!element || !chatElement) return false;
     const box = element.getBoundingClientRect();

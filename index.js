@@ -1,5 +1,5 @@
 import { SETTINGS_KEY, assignCustomTitle, findTarget, isMessageBookmarked, setMessageBookmark } from './model.js';
-import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage } from './scroll.js';
+import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage, isPastMessageStart, canScrollToChatBottom } from './scroll.js';
 import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
 import { validPanelSize } from './panel-size.js';
@@ -40,12 +40,14 @@ class NavigatorApp {
         this.busy = false;
         this.lastNavigated = -1;
         this.lastLanding = null;
+        this.startLanding = null;
         this.cursor = new NavigationCursor();
         this.refreshTimer = null;
         this.listeners = [];
         this.chatElement = null;
         this.chatScrollHandler = () => {
             if (this.lastLanding && Math.abs((this.chatElement?.scrollTop ?? 0) - this.lastLanding.scrollTop) > 2) this.lastLanding = null;
+            if (this.startLanding && Math.abs((this.chatElement?.scrollTop ?? 0) - this.startLanding.scrollTop) > 2) this.startLanding = null;
             if (this.busy || this.scrollRaf !== null) return;
             this.scrollRaf = requestAnimationFrame(() => {
                 this.scrollRaf = null;
@@ -115,7 +117,19 @@ class NavigatorApp {
 
     canNavigate(action, index) {
         const ctx = context();
-        return findTarget(ctx.chat || [], index, action, this.settings.mode) >= 0;
+        const chat = ctx.chat || [];
+        if (findTarget(chat, index, action, this.settings.mode) >= 0) return true;
+        if (action === 'next' && index === findTarget(chat, index, 'last', this.settings.mode)) {
+            return canScrollToChatBottom(this.chatElement);
+        }
+        if (action === 'previous' && index >= 0) {
+            const anchor = this.startLanding;
+            const atStart = anchor && anchor.chat === chat && anchor.id === ctx.chatId &&
+                anchor.index === index && this.chatElement &&
+                Math.abs(this.chatElement.scrollTop - anchor.scrollTop) <= 2;
+            return !atStart && isPastMessageStart(this.chatElement, getRenderedMessage(this.chatElement, index));
+        }
+        return false;
     }
 
     updateCurrent() {
@@ -132,6 +146,8 @@ class NavigatorApp {
         if (current === this.chatElement) return;
         this.chatElement?.removeEventListener('scroll', this.chatScrollHandler);
         this.cursor.clear();
+        this.startLanding = null;
+        this.lastLanding = null;
         this.chatElement = current;
         this.chatElement?.addEventListener('scroll', this.chatScrollHandler, { passive: true });
         this.resizeObserver?.disconnect();
@@ -213,7 +229,7 @@ class NavigatorApp {
             this.busy = false;
             this.cursor.clear();
             this.lastLanding = null;
-            this.clearTargetHighlight();
+            this.startLanding = null;
             this.view.editing = -1;
             this.view.query = '';
             this.view.search.value = '';
@@ -257,43 +273,90 @@ class NavigatorApp {
         }, 90);
     }
 
+    /**
+     * Q-05: Previous from the middle first returns to THIS message's start.
+     * Once on its start, the next press moves to the preceding message.
+     * The final "next" press can move down to the true bottom, sharing the
+     * same endpoint behavior as the second "last" press.
+     */
     async navigate(action) {
         if (this.busy) return;
         if (action !== 'last') this.lastLanding = null;
         const ctx = context();
         this.bindChatScroll();
-        const base = this.cursor.resolve(this.chatElement, ctx.chat?.length || 0);
-        const target = findTarget(ctx.chat || [], base, action, this.settings.mode);
-        this.diagnostics.record('navigation', 'target_resolved', { status: target >= 0 ? 'ok' : 'skipped', targetIndex: target >= 0 ? target : undefined });
+        const chat = ctx.chat || [];
+        const base = this.cursor.resolve(this.chatElement, chat.length);
+
+        if (action === 'previous' && base >= 0) {
+            const anchor = this.startLanding;
+            const atStart = anchor && anchor.chat === chat && anchor.id === ctx.chatId &&
+                anchor.index === base && this.chatElement &&
+                Math.abs(this.chatElement.scrollTop - anchor.scrollTop) <= 2;
+            const node = getRenderedMessage(this.chatElement, base);
+            if (!atStart && isPastMessageStart(this.chatElement, node) &&
+                scrollToMessage(this.chatElement, node)) {
+                this.cursor.set(this.chatElement, base);
+                this.startLanding = {
+                    chat, id: ctx.chatId, index: base,
+                    scrollTop: this.chatElement.scrollTop,
+                };
+                this.lastNavigated = base;
+                this.view.setActive(base);
+                this.view.setStatus(`메시지 #${base}의 처음으로 이동했습니다.`);
+                this.diagnostics.record('navigation', 'previous_current_start',
+                    { status: 'ok', targetIndex: base });
+                return;
+            }
+        }
+
+        const target = findTarget(chat, base, action, this.settings.mode);
+        this.diagnostics.record('navigation', 'target_resolved',
+            { status: target >= 0 ? 'ok' : 'skipped', targetIndex: target >= 0 ? target : undefined });
+
+        if (action === 'next' && target < 0 &&
+            base === findTarget(chat, base, 'last', this.settings.mode) &&
+            canScrollToChatBottom(this.chatElement)) {
+            this.scrollToBottom(base, 'next_bottom');
+            return;
+        }
         if (target < 0) return;
+
         if (action === 'last') {
             const landing = this.lastLanding;
-            if (landing && landing.chat === ctx.chat && landing.id === ctx.chatId &&
+            if (landing && landing.chat === chat && landing.id === ctx.chatId &&
                 landing.index === target && this.chatElement &&
                 Math.abs(this.chatElement.scrollTop - landing.scrollTop) <= 2) {
                 this.lastLanding = null;
-                // The second press goes to the actual bottom of the chat.
-                this.chatElement.scrollTo({
-                    top: this.chatElement.scrollHeight - this.chatElement.clientHeight,
-                    behavior: 'instant',
-                });
-                this.cursor.set(this.chatElement, target);
-                this.view.setActive(target);
-                this.diagnostics.record('navigation', 'last_bottom', { status: 'ok', targetIndex: target });
+                this.scrollToBottom(target, 'last_bottom');
                 return;
             }
         }
         const reached = await this.goToIndex(target);
         if (action === 'last' && reached && this.chatElement) {
             this.lastLanding = {
-                chat: ctx.chat, id: ctx.chatId, index: target,
+                chat, id: ctx.chatId, index: target,
                 scrollTop: this.chatElement.scrollTop,
             };
         }
     }
 
+    scrollToBottom(index, eventCode) {
+        if (!this.chatElement) return;
+        this.startLanding = null;
+        this.chatElement.scrollTo({
+            top: Math.max(0, this.chatElement.scrollHeight - this.chatElement.clientHeight),
+            behavior: 'instant',
+        });
+        this.cursor.set(this.chatElement, index);
+        this.lastNavigated = index;
+        this.view.setActive(index);
+        this.view.setStatus('채팅 화면 맨 아래로 이동했습니다.');
+        this.diagnostics.record('navigation', eventCode, { status: 'ok', targetIndex: index });
+    }
+
     async goToIndex(index) {
         this.lastLanding = null;
+        this.startLanding = null;
         if (this.busy) return false;
         const initial = context();
         const chatRef = initial.chat;
@@ -315,8 +378,11 @@ class NavigatorApp {
             const node = getRenderedMessage(chatElement, index);
             if (!scrollToMessage(chatElement, node)) throw new Error('대상 메시지가 화면에서 숨겨져 있어 스크롤할 수 없습니다.');
             this.cursor.set(chatElement, index);
+            this.startLanding = {
+                chat: chatRef, id: chatId, index,
+                scrollTop: chatElement.scrollTop,
+            };
             this.lastNavigated = index;
-            this.highlightTarget(node);
             this.view.setActive(index, true);
             this.view.setStatus(`메시지 #${index}로 이동했습니다.`);
             this.diagnostics.record('navigation', 'jump_completed', { status: 'ok', targetIndex: index, durationMs: Date.now() - started });
@@ -336,22 +402,6 @@ class NavigatorApp {
                 this.view.setActive(this.lastNavigated);
             }
         }
-    }
-
-    // A short highlight removes ambiguity near the end of a chat where the
-    // selected message cannot be scrolled all the way to the top.
-    highlightTarget(node) {
-        this.clearTargetHighlight();
-        this.highlightedNode = node;
-        node.classList.add('stmn-jump-target');
-        this.highlightTimer = setTimeout(() => this.clearTargetHighlight(), 1800);
-    }
-
-    clearTargetHighlight() {
-        if (this.highlightTimer !== undefined) clearTimeout(this.highlightTimer);
-        this.highlightTimer = undefined;
-        this.highlightedNode?.classList.remove('stmn-jump-target');
-        this.highlightedNode = null;
     }
 
     /** Select an existing swipe through SillyTavern's own swipe engine.
@@ -457,7 +507,7 @@ class NavigatorApp {
         this.diagnostics.record('lifecycle', 'destroyed', { status: 'ok' });
         this.cursor.clear();
         this.lastLanding = null;
-        this.clearTargetHighlight();
+        this.startLanding = null;
         if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
         if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
         this.resizeObserver?.disconnect();
@@ -474,7 +524,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.11.0)');
+        console.info(PREFIX, 'loaded (v1.12.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
