@@ -5,6 +5,7 @@ import { selectLibraryChats } from './library-operations.js';
 import { buildQuietFolderSections, FOLDER_DRAWER_PAGE_SIZE } from './quiet-folders.js';
 import { QuietChatPreviewUI } from './chat-preview-ui.js';
 import { BatchFileUI } from './batch-file-ui.js';
+import { FileActionUI } from './file-action-ui.js';
 
 const make = (tag, className = '', text) => {
     const el = document.createElement(tag);
@@ -160,6 +161,7 @@ export class LibraryLobby {
         owner.contentArea.prepend(this.folderDrawer);
         this.previewUI = new QuietChatPreviewUI(owner);
         this.fileUI = new BatchFileUI(this);
+        this.fileActions = new FileActionUI(this);
     }
 
     setDrawerOpen(force) {
@@ -266,6 +268,7 @@ export class LibraryLobby {
         this.previewUI.invalidate(scope);
         if (this.loadedScope !== scope) {
             this.fileUI.reset(scope);
+            this.fileActions.dismissOnNavigation();
             this.loadedScope = scope;
             this.visible = 100;
             this.openDetails.clear();
@@ -337,6 +340,7 @@ export class LibraryLobby {
         const data = this.data;
         if (!data) {
             this.fileUI.reset();
+            this.fileActions.dismissOnNavigation();
             this.controls.hidden = true;
             this.renderFolderDrawer();
             return;
@@ -453,9 +457,23 @@ export class LibraryLobby {
                     menu.open=false;
                     this.fileUI.enable(true,item);
                 });
-                const futureName=make('div','stmn-quiet-menu-label',
-                    '이름 변경 · 삭제는 Q-07B 안전 검증 후 제공');
-                menuBody.append(infoEdit,category,legacy,selectFile,futureName);
+                const renameFile=button('파일 이름 변경 · 백업 후', 'stmn-quiet-menu-item',
+                    () => {
+                        menu.open=false;
+                        void this.fileActions.begin('rename',item);
+                    });
+                const deleteFile=button('파일 삭제 · 백업 후', 'stmn-quiet-menu-item stmn-file-menu-danger',
+                    () => {
+                        menu.open=false;
+                        void this.fileActions.begin('delete',item);
+                    });
+                // Prevent changes to the actively edited chat; never attempt
+                // to switch chats automatically during a destructive action.
+                renameFile.disabled=deleteFile.disabled=current;
+                if(current){
+                    renameFile.title=deleteFile.title='다른 채팅으로 이동해야 변경할 수 있습니다.';
+                }
+                menuBody.append(infoEdit,category,legacy,selectFile,renameFile,deleteFile);
                 menu.append(summary,menuBody);
                 line.append(editDescription,peek,menu);
             }
@@ -535,6 +553,7 @@ export class LibraryLobby {
         this.closeEditor();
         this.previewUI.destroy();
         this.fileUI.destroy();
+        this.fileActions.destroy();
         this.folderDrawer.remove();
         this.expandedFolderKeys.clear();
         this.folderPageLimits.clear();
