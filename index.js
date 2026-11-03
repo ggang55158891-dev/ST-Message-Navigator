@@ -1,4 +1,4 @@
-import { SETTINGS_KEY, assignCustomTitle, findTarget } from './model.js';
+import { SETTINGS_KEY, assignCustomTitle, findTarget, isMessageBookmarked, setMessageBookmark } from './model.js';
 import { ensureMessageRendered, getChatElement, NavigationCursor, getRenderedMessage, scrollToMessage } from './scroll.js';
 import { installSettings, NavigatorView } from './ui.js';
 import { validNavPosition } from './position.js';
@@ -36,6 +36,7 @@ class NavigatorApp {
         this.library = new LibraryRepository(context);
         this.diagnostics = new Diagnostics({ enabled: this.settings.diagnosticsEnabled });
         this.navSerial = 0;
+        this.bookmarkSaving = false;
         this.busy = false;
         this.lastNavigated = -1;
         this.lastLanding = null;
@@ -58,6 +59,8 @@ class NavigatorApp {
             goToIndex: index => { void this.goToIndex(index); },
             canNavigate: (kind, index) => this.canNavigate(kind, index),
             saveTitle: (index, title) => this.saveTitle(index, title),
+            isBookmarked: index => isMessageBookmarked(context().chat?.[index], context().chatMetadata),
+            toggleBookmark: index => this.toggleBookmark(index),
             getPosition: () => this.settings.position,
             savePosition: position => this.changeSetting('position', position),
             getPanelSize: () => this.settings.panelSize,
@@ -350,6 +353,35 @@ class NavigatorApp {
         this.highlightedNode = null;
     }
 
+    async toggleBookmark(index) {
+        if (this.bookmarkSaving) return;
+        const ctx = context();
+        const chatRef = ctx.chat;
+        const chatId = ctx.chatId;
+        if (!ctx.chatId || !Array.isArray(chatRef) || !chatRef[index] || !ctx.chatMetadata ||
+            typeof ctx.saveMetadata !== 'function') {
+            this.view.setStatus('먼저 저장 가능한 채팅을 선택해 주세요.', true);
+            return;
+        }
+        this.bookmarkSaving = true;
+        try {
+            const previous = isMessageBookmarked(chatRef[index], ctx.chatMetadata);
+            if (!setMessageBookmark(chatRef, ctx.chatMetadata, index, !previous)) return;
+            await ctx.saveMetadata();
+            if (context().chat !== chatRef || context().chatId !== chatId) {
+                throw new Error('저장 도중 채팅이 바뀌었습니다. 북마크를 확인해 주세요.');
+            }
+            this.diagnostics.record('save', 'message_bookmark_saved', { status: 'ok', targetIndex: index });
+            this.view.renderRows(true);
+            this.view.setStatus(!previous ? '메시지를 북마크했습니다.' : '메시지 북마크를 해제했습니다.');
+        } catch(error) {
+            this.diagnostics.record('save', 'message_bookmark_failed', { status: 'error', targetIndex: index, error });
+            this.view.setStatus(error?.message || '북마크를 저장하지 못했습니다.', true);
+        } finally {
+            this.bookmarkSaving = false;
+        }
+    }
+
     async saveTitle(index, title) {
         const ctx = context();
         if (!ctx.chatId || !ctx.chatMetadata || !Array.isArray(ctx.chat) || !ctx.chat[index]) {
@@ -397,7 +429,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.7.1)');
+        console.info(PREFIX, 'loaded (v1.8.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
