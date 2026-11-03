@@ -93,7 +93,7 @@ test('validator refuses unknown schemas, malformed records and dangling folders/
 test('backup parser rejects wrong types, invalid JSON and future migration schema', () => {
     assert.throws(() => parseLibraryBackup('{broken'), /JSON/);
     const future = JSON.parse(createLibraryBackup(emptyLibrary()));
-    future.schemaVersion = 2;
+    future.schemaVersion = 999;
     assert.throws(() => parseLibraryBackup(JSON.stringify(future)), /지원하지/);
     future.schemaVersion = 1;
     future.type = 'other-extension';
@@ -199,4 +199,60 @@ test('invalid stored library is not replaced by an empty library on read/import'
     assert.throws(() => store.read(), /손상된/);
     assert.throws(() => store.importAdditively(emptyLibrary()), /손상된/);
     assert.equal(current.extensionSettings[LIBRARY_KEY].important, 'retain this');
+});
+
+
+test('legacy v1 library backup migrates in memory without overwriting alias values', () => {
+    const old = filled();
+    old.schemaVersion = 1;
+    for (const record of Object.values(old.records)) delete record.description;
+    const frozen = JSON.stringify(old);
+    const validated = validateLibrary(old);
+    assert.equal(JSON.stringify(old), frozen, 'a read must not write');
+    assert.equal(validated.schemaVersion, 2);
+    const reference = chatReference('character:b.png','same-chat');
+    assert.equal(validated.records[reference].alias,'안개 속의 건물');
+    assert.equal(validated.records[reference].description,'');
+    const backup = JSON.parse(createLibraryBackup(emptyLibrary()));
+    backup.schemaVersion = 1;
+    backup.library = old;
+    const imported = parseLibraryBackup(JSON.stringify(backup)).library;
+    assert.equal(imported.records[reference].alias,'안개 속의 건물');
+    assert.equal(imported.records[reference].description,'');
+    const merged = mergeLibrary(emptyLibrary(), imported);
+    assert.equal(merged.records[reference].alias,'안개 속의 건물');
+});
+
+test('descriptions survive v2 backup roundtrip, invalid data is not written', () => {
+    const current = ctx();
+    const reference = currentChatReference(current);
+    const store = new LibraryRepository(() => current);
+    store.update({kind:'chat',type:'description',reference,value:'라쟉과 로폰의 이야기'});
+    const record = store.read().records[reference];
+    assert.equal(record.description,'라쟉과 로폰의 이야기');
+    assert.equal(record.alias,'');
+    const parsed = parseLibraryBackup(createLibraryBackup(store.read()));
+    assert.equal(parsed.library.records[reference].description,'라쟉과 로폰의 이야기');
+    const snapshot = JSON.stringify(current.extensionSettings);
+    assert.throws(()=>store.update({kind:'chat',type:'description',reference,value:'x'.repeat(241)}),/240/);
+    assert.equal(JSON.stringify(current.extensionSettings),snapshot);
+});
+
+test('old saved v1 library is migrated only on a meaningful edit', () => {
+    const current = ctx();
+    const legacy = filled();
+    legacy.schemaVersion = 1;
+    for(const row of Object.values(legacy.records)) delete row.description;
+    current.extensionSettings[LIBRARY_KEY] = legacy;
+    const snapshot = JSON.stringify(legacy);
+    const store = new LibraryRepository(()=>current);
+    assert.equal(store.read().schemaVersion,2);
+    assert.equal(JSON.stringify(current.extensionSettings[LIBRARY_KEY]),snapshot);
+    const reference = chatReference('character:b.png','same-chat');
+    store.update({kind:'chat',type:'description',reference,value:'새로운 설명'});
+    assert.equal(current.extensionSettings[LIBRARY_KEY].schemaVersion,2);
+    assert.equal(current.extensionSettings[LIBRARY_KEY].records[reference].alias,'안개 속의 건물');
+    assert.equal(current.extensionSettings[LIBRARY_KEY].records[reference].description,'새로운 설명');
+    assert.equal(current.extensionSettings.other_extension.marker,'KEEP');
+    assert.equal(current.saveCount,1);
 });

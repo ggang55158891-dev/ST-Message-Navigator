@@ -28,7 +28,7 @@ export function installLibraryBackupUI(host, { readLibrary, importLibrary } = {}
     panel.append(node('summary', '채팅 관리 데이터 · 백업 및 점검'));
     const body = node('div', undefined, 'stmn-library-controls');
     body.append(node('p',
-        '채팅 관리 데이터의 전용 저장소를 점검하고 백업합니다. 현재 채팅 원본·메시지 제목·이미지는 포함되지 않습니다. 별명·폴더 등 관리 UI는 다음 단계에서 추가됩니다.'));
+        '채팅 관리 데이터의 전용 저장소를 점검하고 백업합니다. 현재 채팅 원본·메시지 제목·이미지는 포함되지 않습니다. 별명·설명·폴더·태그·즐겨찾기를 포함하며 이전 v1 백업도 검증 후 복원합니다.'));
     const actions = node('div', undefined, 'stmn-library-actions');
     const inspectButton = node('button', '관리 데이터 상태 확인');
     const exportButton = node('button', '관리 데이터 JSON 다운로드');
@@ -72,7 +72,7 @@ export function installLibraryBackupUI(host, { readLibrary, importLibrary } = {}
     });
     exportButton.addEventListener('click', () => {
         try {
-            triggerDownload(createLibraryBackup(readLibrary(), { version: '1.5.0' }));
+            triggerDownload(createLibraryBackup(readLibrary(), { version: '1.8.0' }));
             feedback.textContent = '관리 데이터 백업 다운로드를 요청했습니다.';
         } catch (error) {
             feedback.textContent = error?.message || '백업을 생성할 수 없습니다.';

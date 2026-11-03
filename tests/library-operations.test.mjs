@@ -58,7 +58,7 @@ test('sort recent, folder+recent, explicit creation date, unknown creation date 
     data = doChange(data,{kind:'chat',type:'folder',reference:ref,value:'f1'});
     const createdRef = chatReference(scope,'old-file');
     data.records[createdRef] = {
-        alias:'',folderId:null,favorite:false,tagIds:[],imageRef:null,lastRead:null,
+        alias:'',description:'',folderId:null,favorite:false,tagIds:[],imageRef:null,lastRead:null,
         customSortOrder:null,createdAt:'2026-05-01T00:00:00Z',createdAtSource:'metadata',
     };
     assert.deepEqual(selectLibraryChats(base,scope,data,{sort:'recent'}).map(x=>x.id), ['new-file','same-file','old-file']);
@@ -102,4 +102,18 @@ test('repository save exception rolls back while leaving the old stored library'
     assert.throws(()=>repository.update({kind:'chat',type:'favorite',reference:ref,value:true}),/blocked/);
     assert.equal(Object.hasOwn(ctx.extensionSettings,LIBRARY_KEY),false);
     assert.equal(ctx.extensionSettings.third_party,'safe');
+});
+
+
+test('chat descriptions are searchable, separate from aliases, and safe to clear', () => {
+    let library=emptyLibrary();
+    library=changeLibrary(library,{kind:'chat',type:'alias',reference:ref,value:'예전 별명'});
+    library=changeLibrary(library,{kind:'chat',type:'description',reference:ref,value:'따뜻한 겨울 이야기'});
+    assert.equal(library.records[ref].alias,'예전 별명');
+    assert.equal(library.records[ref].description,'따뜻한 겨울 이야기');
+    assert.equal(selectLibraryChats(base,scope,library,{query:'겨울 이야기'})[0].id,'same-file');
+    library=changeLibrary(library,{kind:'chat',type:'description',reference:ref,value:''});
+    assert.equal(library.records[ref].alias,'예전 별명');
+    assert.equal(library.records[ref].description,'');
+    assert.throws(()=>changeLibrary(library,{kind:'chat',type:'description',reference:ref,value:'a\nb'}),/제어문자/);
 });

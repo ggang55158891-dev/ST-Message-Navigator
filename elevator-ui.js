@@ -102,6 +102,10 @@ export class ElevatorPanel {
         this.view.root.dataset.elevatorTheme = ELEVATOR_THEMES.includes(theme) ? theme : 'classic';
         this.view.root.dataset.elevatorSky = skyModes.includes(skyMode) ? skyMode : 'auto';
         this.quiet?.refresh();
+        if (this.tab === 'buildings' && this.libraryUI?.data && this.view.panelOpen) {
+            this.libraryUI.draw();
+        }
+        this.updateFloor(this.view.currentIndex);
     }
 
     updateFloor(index) {
@@ -110,7 +114,10 @@ export class ElevatorPanel {
             ? (context.groups || []).find(group => String(group.id) === String(context.groupId))
             : context.characters?.[context.characterId];
         const name = cleanChatId(context.chatId);
-        this.buildingName.textContent = this.libraryUI?.getAlias(buildingScope(context),name) || name || selected?.name || '선택된 채팅 없음';
+        const legacyAlias = this.libraryUI?.getAlias(buildingScope(context), name);
+        this.buildingName.textContent = this.view.root.dataset.elevatorTheme === 'quiet'
+            ? (name || selected?.name || '선택된 채팅 없음')
+            : (legacyAlias || name || selected?.name || '선택된 채팅 없음');
         this.buildingName.title = name;
         this.floor.textContent = Number.isInteger(index) && index >= 0 ? '#' + index : '#—';
         this.floor.title = '현재 메시지 번호';

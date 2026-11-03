@@ -2,7 +2,9 @@
 import { buildingScope, cleanChatId } from './building-data.js';
 
 export const LIBRARY_KEY = 'stmn_library_v1';
-export const LIBRARY_SCHEMA = 1;
+export const LIBRARY_SCHEMA = 2;
+export const LEGACY_LIBRARY_SCHEMA = 1;
+export const MAX_CHAT_DESCRIPTION = 240;
 export const MAX_LIBRARY_BYTES = 256 * 1024;
 // Human-readable backup formatting can be larger than the compact store.
 export const MAX_LIBRARY_BACKUP_BYTES = MAX_LIBRARY_BYTES * 3;
@@ -40,7 +42,7 @@ export function emptyLibrary() {
 
 export function emptyRecord() {
     return {
-        alias: '', folderId: null, favorite: false, tagIds: [],
+        alias: '', description: '', folderId: null, favorite: false, tagIds: [],
         imageRef: null, lastRead: null, customSortOrder: null,
         createdAt: null, createdAtSource: null,
     };
@@ -61,9 +63,18 @@ function validateCatalog(rows, max) {
     return seen;
 }
 
-function validateRecord(record, folders, tags) {
+function validateRecord(record, folders, tags, version) {
     const fields = Object.keys(emptyRecord());
-    if (!exactly(record, fields)) throw new Error('관리 데이터 필드가 누락되었거나 지원되지 않습니다.');
+    const expected = version === LEGACY_LIBRARY_SCHEMA
+        ? fields.filter(field => field !== 'description') : fields;
+    if (!exactly(record, expected)) throw new Error('관리 데이터 필드가 누락되었거나 지원되지 않습니다.');
+    if (version === LIBRARY_SCHEMA &&
+        (typeof record.description !== 'string' ||
+         record.description.length > MAX_CHAT_DESCRIPTION ||
+         record.description.trim() !== record.description ||
+         /[\u0000-\u001f\u007f]/.test(record.description))) {
+        throw new Error('채팅 설명은 공백 양끝·제어문자 없이 최대 240자까지 입력할 수 있습니다.');
+    }
     if (typeof record.alias !== 'string' || record.alias.length > 120 ||
         record.alias.trim() !== record.alias ||
         typeof record.favorite !== 'boolean' ||
@@ -90,7 +101,8 @@ function validateRecord(record, folders, tags) {
 export function validateLibrary(raw) {
     if (raw === undefined || raw === null) return emptyLibrary();
     if (!exactly(raw, ['schemaVersion', 'records', 'folders', 'tags']) ||
-        raw.schemaVersion !== LIBRARY_SCHEMA || !isObject(raw.records)) {
+        ![LEGACY_LIBRARY_SCHEMA, LIBRARY_SCHEMA].includes(raw.schemaVersion) ||
+        !isObject(raw.records)) {
         throw new Error('알 수 없거나 손상된 채팅 관리 데이터입니다. 기존 데이터를 덮어쓰지 않습니다.');
     }
     const folders = validateCatalog(raw.folders, MAX_LIBRARY_FOLDERS);
@@ -106,8 +118,11 @@ export function validateLibrary(raw) {
             chatReference(reference[0], reference[1]) !== key) {
             throw new Error('채팅 식별자 형식이 손상되었습니다.');
         }
-        validateRecord(record, folders, tags);
-        records[key] = { ...record, tagIds: [...record.tagIds] };
+        validateRecord(record, folders, tags, raw.schemaVersion);
+        // v1 aliases are never silently reinterpreted as descriptions.
+        // Migration remains in memory until the next explicit user edit.
+        records[key] = { ...record, description: raw.schemaVersion === LEGACY_LIBRARY_SCHEMA
+            ? '' : record.description, tagIds: [...record.tagIds] };
     }
     const clean = {
         schemaVersion: LIBRARY_SCHEMA, records,
@@ -164,7 +179,9 @@ export function parseLibraryBackup(text) {
     let root;
     try { root = JSON.parse(text); } catch { throw new Error('유효한 JSON 백업 파일이 아닙니다.'); }
     if (!exactly(root, ['type', 'schemaVersion', 'exportedAt', 'extensionVersion', 'library']) ||
-        root.type !== LIBRARY_BACKUP_KIND || root.schemaVersion !== LIBRARY_SCHEMA ||
+        root.type !== LIBRARY_BACKUP_KIND ||
+        ![LEGACY_LIBRARY_SCHEMA, LIBRARY_SCHEMA].includes(root.schemaVersion) ||
+        root.schemaVersion !== root.library?.schemaVersion ||
         typeof root.exportedAt !== 'string' ||
         !Number.isFinite(Date.parse(root.exportedAt)) ||
         typeof root.extensionVersion !== 'string') {
