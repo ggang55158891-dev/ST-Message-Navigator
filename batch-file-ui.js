@@ -131,7 +131,7 @@ export class BatchFileUI {
             });
             const timestamp=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
             downloadBackupBlob(blob,'Elevator-Chat-Backup-'+timestamp+'.zip');
-            this.status.textContent=count+'개 JSONL 채팅을 ZIP으로 다운로드했습니다. 다운로드 폴더에서 파일을 확인해 주세요.';
+            this.status.textContent=count+'개 JSONL 채팅의 ZIP 다운로드를 요청했습니다. 다운로드 폴더에서 파일을 확인해 주세요.';
             return true;
         } catch(error) {
             this.status.textContent=error?.message||'백업 파일을 만들지 못했습니다.';
