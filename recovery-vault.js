@@ -115,6 +115,10 @@ export class RecoveryVault {
             librarySnapshot,
         };
         if(!validEntry(meta))throw new Error('보관함 기록을 검증할 수 없습니다.');
+        // Best effort: Chrome may grant persistent storage based on user
+        // engagement. Denial does not imply IndexedDB cannot work; the
+        // subsequent durable transaction + readback remains mandatory.
+        try {await globalThis.navigator?.storage?.persist?.();} catch {}
         const db=await this.open();
         try {
             const tx=db.transaction(['entries','payloads'],'readwrite');
