@@ -3,7 +3,7 @@
  * crawler or a persistent index. Raw JSONL/JSON messages are processed once
  * and discarded; results contain only short excerpts.
  */
-import {cleanChatId} from './building-data.js';
+import {cleanChatId,buildingScope} from './building-data.js';
 import {validateChatPreviewTarget} from './chat-preview.js';
 import {getTitle} from './model.js';
 
@@ -120,6 +120,9 @@ export async function readChatMatches(ctx,scope,buildings,item,{
         body:JSON.stringify(target.body),signal,cache:'no-store',
     });
     const records=await readBoundedChatResponse(response,{signal});
+    if(signal?.aborted)throw new DOMException('취소됨','AbortError');
+    if(buildingScope(ctx)!==scope)
+        throw new Error('채팅 범위가 변경되어 검색 결과를 폐기했습니다.');
     return {id:cleanChatId(target.id),
         matches:projectChatMatches(records,{query,titles,body}),
     };
