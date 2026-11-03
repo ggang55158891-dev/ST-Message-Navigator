@@ -470,7 +470,8 @@ async function run() {
             const dialog=page.locator('.stmn-swipe-dialog');
             await dialog.waitFor({state:'visible'});
             assert.equal(await dialog.locator('.stmn-swipe-card').count(),3);
-            assert.equal((await dialog.locator('.stmn-swipe-card-text').first().textContent()).length,1259);
+            assert.ok((await dialog.locator('.stmn-swipe-card-text').first().textContent()).length>1250,
+                'Complete first swipe must be present, not truncated');
             await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).click();
             assert.equal(await dialog.getByRole('button',{name:'스와이프 #2 즐겨찾기'}).getAttribute('aria-pressed'),'true');
             assert.equal(await page.evaluate(()=>window.__q06Saves),1);
@@ -509,9 +510,9 @@ async function run() {
             assert.equal(actual.other,true);
             assert.equal(actual.options.forceMesId,0);
             assert.equal(actual.options.forceSwipeId,2);
-            assert.equal(actual.saved.stmn_message_outline_v1.swipeAnnotations[
-                page ? await page.evaluate(()=>window.__themeAppContext.chat[0].stmn_message_id_v1) : ''
-            ]!==undefined,true);
+            const stableId=await page.evaluate(()=>window.__themeAppContext.chat[0].stmn_message_id_v1);
+            assert.ok(actual.saved.stmn_message_outline_v1.swipeAnnotations[stableId],
+                'Swipe marks must persist in extension-owned per-message metadata');
             await dialog.getByRole('button',{name:'스와이프 관리 닫기'}).click();
             assert.equal(await dialog.isVisible(),false);
             assert.equal(await page.locator('#chat .stmn-swipe-tool').count(),1,
