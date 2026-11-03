@@ -6,6 +6,7 @@ import { buildQuietFolderSections, FOLDER_DRAWER_PAGE_SIZE } from './quiet-folde
 import { QuietChatPreviewUI } from './chat-preview-ui.js';
 import { BatchFileUI } from './batch-file-ui.js';
 import { FileActionUI } from './file-action-ui.js';
+import { ChatSearchUI } from './chat-search-ui.js';
 
 const make = (tag, className = '', text) => {
     const el = document.createElement(tag);
@@ -162,6 +163,7 @@ export class LibraryLobby {
         this.previewUI = new QuietChatPreviewUI(owner);
         this.fileUI = new BatchFileUI(this);
         this.fileActions = new FileActionUI(this);
+        this.searchUI = new ChatSearchUI(this);
     }
 
     setDrawerOpen(force) {
@@ -266,6 +268,7 @@ export class LibraryLobby {
 
     setData(data, scope) {
         this.previewUI.invalidate(scope);
+        this.searchUI.invalidate();
         if (this.loadedScope !== scope) {
             this.fileUI.reset(scope);
             this.fileActions.dismissOnNavigation();
@@ -329,6 +332,7 @@ export class LibraryLobby {
         }
         const result = owner.callbacks.changeLibrary(action);
         this.data = result;
+        this.searchUI.invalidate();
         this.error.textContent = '관리 정보 저장을 요청했습니다.';
         this.draw();
         owner.updateFloor(owner.view.currentIndex);
@@ -339,6 +343,7 @@ export class LibraryLobby {
         const owner = this.owner;
         const data = this.data;
         if (!data) {
+            this.searchUI.invalidate();
             this.fileUI.reset();
             this.fileActions.dismissOnNavigation();
             this.controls.hidden = true;
@@ -554,6 +559,7 @@ export class LibraryLobby {
         this.previewUI.destroy();
         this.fileUI.destroy();
         this.fileActions.destroy();
+        this.searchUI.destroy();
         this.folderDrawer.remove();
         this.expandedFolderKeys.clear();
         this.folderPageLimits.clear();
