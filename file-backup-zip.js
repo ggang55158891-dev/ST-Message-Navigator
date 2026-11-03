@@ -48,6 +48,7 @@ export function packJsonlZip(files) {
         const v=new DataView(h.buffer);
         write32(v,0,0x04034b50);
         write16(v,4,20);write16(v,6,0x800);write16(v,8,0); // UTF-8, store
+        write16(v,10,0);write16(v,12,0x21); // 1980-01-01, valid ZIP DOS date
         write32(v,14,checksum);
         write32(v,18,bytes.length);write32(v,22,bytes.length);
         write16(v,26,nameBytes.length);
@@ -62,7 +63,7 @@ export function packJsonlZip(files) {
         const v=new DataView(h.buffer);
         write32(v,0,0x02014b50);
         write16(v,4,20);write16(v,6,20);write16(v,8,0x800);
-        write16(v,10,0);
+        write16(v,10,0);write16(v,12,0);write16(v,14,0x21);
         write32(v,16,file.checksum);
         write32(v,20,file.bytes.length);write32(v,24,file.bytes.length);
         write16(v,28,file.nameBytes.length);
