@@ -955,3 +955,108 @@
 #stmn-root[data-elevator-theme="quiet"] .stmn-outline :is(button,summary,input):focus-visible {
     outline: 2px solid #545b56; outline-offset: 2px;
 }
+
+
+/* Q-02 correction: eye hover excerpt vs click-through full inline detail. */
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-message-preview {
+    position:absolute;
+    bottom:auto;
+    left:8px;right:8px;
+    width:auto;
+    max-height:none;
+    overflow:hidden;
+    padding:12px 14px;
+    border-radius:14px;
+    box-shadow:none;
+    background:#fbfbfa;
+    border:1px solid #eeefec;
+    display:flex;flex-direction:column;gap:6px;
+    box-sizing:border-box;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-preview-label {
+    font-size:10px;font-weight:650;color:#818983;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-preview-reading {
+    white-space:pre-wrap;overflow-wrap:anywhere;
+    overflow-y:auto;min-height:70px;max-height:147px;flex:1;
+    line-height:1.65;font-size:12px;color:#4a514b;
+    padding:7px 0 10px;
+    scrollbar-width:thin;overscroll-behavior:contain;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-preview-divider {
+    height:1px;min-height:1px;background:#e9eae7;margin:3px 0;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-swipebar {
+    display:flex;justify-content:space-between;align-items:center;gap:7px;
+    background:#f1f2f0;border-radius:10px;
+    padding:6px 8px;color:#797e79;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-swipebuttons {
+    display:flex;align-items:center;gap:3px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-swipebuttons button {
+    border:0;background:transparent;border-radius:7px;
+    color:#434b44;cursor:pointer;font:inherit;font-size:17px;padding:1px 6px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-swipebuttons button:hover:not(:disabled) {background:#fff}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-swipebuttons button:disabled {opacity:.4;cursor:default}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-swipe-active {font-size:9px;color:#9aa09b}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-swipe-text {
+    min-height:33px;max-height:83px;overflow:auto;white-space:pre-wrap;
+    overflow-wrap:anywhere;font-size:11px;line-height:1.5;
+    color:#737b74;scrollbar-width:thin;overscroll-behavior:contain;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-preview-actions {
+    display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:auto;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-preview-actions button {
+    border:1px solid #e7e9e5;background:white;color:#404742;
+    border-radius:10px;cursor:pointer;font-size:10px;
+    padding:7px 11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-preview-actions button:disabled {
+    opacity:.5;cursor:default;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-preview-actions .stmn-quiet-preview-apply:not(:disabled) {
+    color:#fff;background:#393f3a;
+}
+.stmn-quiet-tooltip {
+    position:fixed;z-index:2147480000;
+    pointer-events:none;box-sizing:border-box;
+    width:min(350px,calc(100vw - 16px));max-height:460px;overflow-y:auto;
+    padding:17px 18px;background:#fff;color:#505650;
+    border:1px solid #e7e9e5;border-radius:16px;
+    box-shadow:0 16px 45px #21262324;
+    font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;
+    font-size:11px;line-height:1.7;scrollbar-width:thin;
+}
+.stmn-quiet-tooltip[hidden] {display:none!important}
+.stmn-quiet-tooltip strong {display:block;font-size:11px;margin-bottom:9px}
+.stmn-quiet-tooltip-text {white-space:pre-wrap;overflow-wrap:anywhere}
+@media(hover:none) {.stmn-quiet-tooltip{display:none!important}}
+
+/* Settings update row: above "엘리베이터 외형", not in a general menu. */
+#stmn-settings .stmn-update-controls {
+    display:grid;grid-template-columns:1fr auto;align-items:center;
+    gap:4px 9px;margin:1px 0 12px;padding:9px 0 11px;
+    border-bottom:1px solid #8884;
+}
+#stmn-settings .stmn-update-button {
+    text-align:left;min-height:36px;padding:7px 11px;
+    border:1px solid #85858555;border-radius:10px;background:transparent;
+    color:inherit;cursor:pointer;font:inherit;font-size:12px;
+}
+#stmn-settings .stmn-update-version {font-size:11px;opacity:.8;white-space:nowrap}
+#stmn-settings .stmn-update-feedback {grid-column:1/-1;font-size:10px;opacity:.75;line-height:1.5;overflow-wrap:anywhere}
+#stmn-settings .stmn-update-reload {
+    grid-column:1/-1;font-size:11px;padding:7px 9px;
+    border:1px solid #8885;border-radius:9px;cursor:pointer;
+}
+#stmn-settings .stmn-update-reload[hidden] {display:none!important}
+#stmn-settings .stmn-update-button:disabled {cursor:default;opacity:.6}
+#stmn-settings .stmn-update-controls[data-update-state="available"] .stmn-update-button {
+    background:#d9eee1;color:#1c573a;border:1px solid #59a67a;
+    font-weight:750;opacity:1;box-shadow:0 0 0 2px #56ad7522;
+}
+#stmn-settings .stmn-update-controls[data-update-state="error"] .stmn-update-feedback {color:#dd8d86;opacity:1}
+#stmn-settings .stmn-update-controls[data-update-state="updated"] .stmn-update-feedback {color:#74ad81;opacity:1}
