@@ -4,6 +4,7 @@ import { chatReference, emptyLibrary } from './library-data.js';
 import { selectLibraryChats } from './library-operations.js';
 import { buildQuietFolderSections, FOLDER_DRAWER_PAGE_SIZE } from './quiet-folders.js';
 import { QuietChatPreviewUI } from './chat-preview-ui.js';
+import { BatchFileUI } from './batch-file-ui.js';
 
 const make = (tag, className = '', text) => {
     const el = document.createElement(tag);
@@ -158,6 +159,7 @@ export class LibraryLobby {
         this.folderDrawer.append(drawerHead,this.folderDrawerList);
         owner.contentArea.prepend(this.folderDrawer);
         this.previewUI = new QuietChatPreviewUI(owner);
+        this.fileUI = new BatchFileUI(this);
     }
 
     setDrawerOpen(force) {
@@ -263,6 +265,7 @@ export class LibraryLobby {
     setData(data, scope) {
         this.previewUI.invalidate(scope);
         if (this.loadedScope !== scope) {
+            this.fileUI.reset(scope);
             this.loadedScope = scope;
             this.visible = 100;
             this.openDetails.clear();
@@ -333,6 +336,7 @@ export class LibraryLobby {
         const owner = this.owner;
         const data = this.data;
         if (!data) {
+            this.fileUI.reset();
             this.controls.hidden = true;
             this.renderFolderDrawer();
             return;
@@ -344,6 +348,7 @@ export class LibraryLobby {
             sort: owner.sort.value,
         });
         this.renderFolderDrawer();
+        this.fileUI.renderToolbar();
         owner.buildingsCount.textContent = found.length.toLocaleString() + '개 채팅';
         owner.buildingList.replaceChildren();
         if (!found.length) {
@@ -386,6 +391,7 @@ export class LibraryLobby {
             favorite.title = item.favorite ? '즐겨찾기 해제' : '즐겨찾기 추가';
             favorite.setAttribute('aria-label', item.displayName+' '+favorite.title);
             line.append(enter,favorite);
+            if(quiet && this.fileUI.enabled)line.prepend(this.fileUI.checkbox(item));
             // Quiet uses a quick-description editor without modifying the old
             // alias. It is intentionally separate from the D-stage alias form.
             const showDescriptionEditor = () => {
@@ -443,8 +449,13 @@ export class LibraryLobby {
                     const details = wrapper.querySelector('.stmn-library-details');
                     if (details) details.open = true;
                 });
-                menuBody.append(infoEdit,category,legacy,
-                    make('div','stmn-quiet-menu-label','파일 관리 · 실제 파일 조작은 Q-07에서 추가'));
+                const selectFile = button('파일 작업 · 선택 / 원본 백업', 'stmn-quiet-menu-item', () => {
+                    menu.open=false;
+                    this.fileUI.enable(true,item);
+                });
+                const futureName=make('div','stmn-quiet-menu-label',
+                    '이름 변경 · 삭제는 Q-07B 안전 검증 후 제공');
+                menuBody.append(infoEdit,category,legacy,selectFile,futureName);
                 menu.append(summary,menuBody);
                 line.append(editDescription,peek,menu);
             }
@@ -523,6 +534,7 @@ export class LibraryLobby {
     destroy() {
         this.closeEditor();
         this.previewUI.destroy();
+        this.fileUI.destroy();
         this.folderDrawer.remove();
         this.expandedFolderKeys.clear();
         this.folderPageLimits.clear();
