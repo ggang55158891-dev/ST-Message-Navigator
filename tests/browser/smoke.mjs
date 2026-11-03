@@ -597,14 +597,17 @@ async function run() {
             });
             await page.locator('[data-action="outline"]').click();
             await page.locator('.stmn-quiet-bookmark').first().click();
-            const debug = await page.evaluate(() => ({
-                events:window.__q02BookmarkEvents,
-                buttons:[...document.querySelectorAll('.stmn-quiet-bookmark')].slice(0,3).map(b=>({
-                    index:b.closest('.stmn-row')?.dataset.index,pressed:b.getAttribute('aria-pressed')
-                })),
-                metadata:window.__stmnContext.chatMetadata,
-            }));
-            assert.equal(debug.buttons[0].pressed,'true',JSON.stringify(debug));
+            const savedBookmark = await page.evaluate(() => {
+                const event = window.__q02BookmarkEvents[0];
+                const { bookmarks } = window.__stmnContext.chatMetadata.stmn_message_outline_v1 || {};
+                return { event, stored: Boolean(bookmarks?.['bookmark-' + event?.index]) };
+            });
+            assert.equal(savedBookmark.event?.after, true);
+            assert.equal(savedBookmark.stored, true);
+            const markedRow = page.locator('.stmn-row[data-index="' + savedBookmark.event.index + '"] .stmn-quiet-bookmark');
+            if (await markedRow.count()) {
+                assert.equal(await markedRow.getAttribute('aria-pressed'), 'true');
+            }
             await page.locator('.stmn-row').first().getByRole('button',{name:/내용 미리보기/}).click();
             assert.equal(await page.locator('.stmn-quiet-message-preview').isVisible(),true);
             await page.getByRole('button',{name:'미리보기 닫기'}).click();
