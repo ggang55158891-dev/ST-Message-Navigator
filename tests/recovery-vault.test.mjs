@@ -230,3 +230,26 @@ test('Q07C interrupted deletion audit distinguishes missing, unchanged and modif
         fetcher:async()=>{calls++;return response({result:raw});}}),/원래 캐릭터/);
     assert.equal(calls,0);
 });
+
+test('Q07C interrupted restoration detects a verified output without recreating it',async()=>{
+    const state=ctx();
+    const record={scope,avatar:'hero.png',isGroup:false,name:'old',
+        state:'restoring',action:'delete',resultName:'old - restored-unique',
+        hash:await hashJsonl(raw)};
+    let output=null,reads=0;
+    const fetcher=async(path,options)=>{
+        assert.equal(path,'/api/chats/export');
+        assert.equal(JSON.parse(options.body).file,record.resultName+'.jsonl');
+        reads++;
+        return output===null?{ok:false,status:404}:response({result:output});
+    };
+    const query=()=>inspectArchiveStatus({
+        context:()=>state,record,raw,fetcher,
+    });
+    assert.equal((await query()).code,'restore-missing');
+    output=raw.trimEnd();
+    assert.equal((await query()).code,'restore-present');
+    output=raw.replace('안녕','손상');
+    assert.equal((await query()).code,'restore-changed');
+    assert.equal(reads,3);
+});
