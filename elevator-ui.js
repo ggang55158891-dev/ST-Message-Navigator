@@ -1,6 +1,7 @@
 import { buildingScope, cleanChatId } from './building-data.js';
 import { LibraryLobby } from './library-ui.js';
 import { emptyLibrary } from './library-data.js';
+import { QuietShell } from './quiet-ui.js';
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -89,16 +90,18 @@ export class ElevatorPanel {
 
         header.after(this.dashboard, this.tabs);
         view.footer.before(this.buildingsPane);
+        this.quiet = new QuietShell(this);
         this.updateFloor(view.currentIndex);
         this.applyTheme(callbacks.getTheme?.(), callbacks.getSkyMode?.());
         this.setTab('floors');
     }
 
     applyTheme(theme, skyMode) {
-        const themes = ['classic', 'restricted', 'sky'];
+        const themes = ['classic', 'restricted', 'sky', 'quiet'];
         const skyModes = ['auto', 'day', 'night'];
         this.view.root.dataset.elevatorTheme = themes.includes(theme) ? theme : 'classic';
         this.view.root.dataset.elevatorSky = skyModes.includes(skyMode) ? skyMode : 'auto';
+        this.quiet?.refresh();
     }
 
     updateFloor(index) {
@@ -111,6 +114,7 @@ export class ElevatorPanel {
         this.buildingName.title = name;
         this.floor.textContent = Number.isInteger(index) && index >= 0 ? '#' + index : '#—';
         this.floor.title = '현재 메시지 번호';
+        this.quiet?.refreshContext();
     }
 
     setTab(tab) {
@@ -126,6 +130,7 @@ export class ElevatorPanel {
         this.view.outlineJumps.hidden = buildings;
         this.view.groupTools.hidden = buildings;
         this.buildingsPane.hidden = !buildings;
+        this.quiet?.setTab(this.tab);
         if (!buildings) {
             this.view.applyFilter({ resetScroll: false });
             this.view.renderRows(true);
@@ -228,5 +233,6 @@ export class ElevatorPanel {
     destroy() {
         ++this.requestId;
         this.libraryUI?.destroy();
+        this.quiet?.destroy();
     }
 }
