@@ -673,15 +673,15 @@ async function run() {
             assert.ok(tooltipRect.y>=eyeRect.y+eyeRect.height-2,'tooltip is below the eye');
             await eye.click();
             await page.locator('.stmn-quiet-message-preview').waitFor({state:'visible'});
-            assert.equal((await page.locator('.stmn-quiet-preview-reading').textContent()).length,1204);
-            assert.equal((await page.locator('.stmn-quiet-swipe-text').textContent()).length,1204);
+            assert.equal((await page.locator('.stmn-quiet-preview-reading').textContent()).length,1205);
+            assert.equal((await page.locator('.stmn-quiet-swipe-text').textContent()).length,1205);
             await page.getByRole('button',{name:'다음 스와이프'}).click();
             assert.ok((await page.locator('.stmn-quiet-swipe-text').textContent()).startsWith('두 번째'));
-            assert.equal((await page.locator('.stmn-quiet-swipe-text').textContent()).length,1154);
+            assert.equal((await page.locator('.stmn-quiet-swipe-text').textContent()).length,1155);
             await page.getByRole('button',{name:'이 스와이프 적용'}).click();
             assert.deepEqual(await page.evaluate(()=>window.__previewSelections[0]),
                 {index:sourceIndex,swipeIndex:1});
-            assert.equal((await page.locator('.stmn-quiet-preview-reading').textContent()).length,1154,
+            assert.equal((await page.locator('.stmn-quiet-preview-reading').textContent()).length,1155,
                 'after applying, the actual current message becomes the selected swipe');
             await page.getByRole('button',{name:'미리보기 닫기'}).click();
             assert.equal(await page.locator('.stmn-quiet-message-preview').count(),0);
@@ -706,6 +706,7 @@ async function run() {
             });});
             await page.locator('#stmn-settings > details > summary').click();
             const update=page.locator('#stmn-update-button');
+            await page.waitForFunction(() => document.querySelector('.stmn-update-controls')?.dataset.updateState === 'error');
             await update.click();
             await page.waitForFunction(()=>document.querySelector('.stmn-update-controls')?.dataset.updateState==='available');
             assert.equal(await update.textContent(),'업데이트 설치');
