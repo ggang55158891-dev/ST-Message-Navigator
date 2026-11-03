@@ -663,7 +663,7 @@ async function run() {
             });
             await page.locator('[data-action="outline"]').click();
             const eye=page.locator('.stmn-row').first().getByRole('button',{name:/내용 미리보기/});
-            const sourceIndex=Number(await eye.locator('xpath=..').getAttribute('data-index'));
+            // Virtual rows recycle during pointer scroll; use the actually opened preview's message ID.
             await eye.hover();
             await page.locator('.stmn-quiet-tooltip').waitFor({state:'visible'});
             const excerpt=await page.locator('.stmn-quiet-tooltip-text').textContent();
@@ -679,8 +679,10 @@ async function run() {
             assert.ok((await page.locator('.stmn-quiet-swipe-text').textContent()).startsWith('두 번째'));
             assert.equal((await page.locator('.stmn-quiet-swipe-text').textContent()).length,1155);
             await page.getByRole('button',{name:'이 스와이프 적용'}).click();
+            const previewIndex=Number((await page.locator('.stmn-quiet-message-preview')
+                .getAttribute('aria-label')).match(/#(\d+)/)[1]);
             assert.deepEqual(await page.evaluate(()=>window.__previewSelections[0]),
-                {index:sourceIndex,swipeIndex:1});
+                {index:previewIndex,swipeIndex:1});
             assert.equal((await page.locator('.stmn-quiet-preview-reading').textContent()).length,1155,
                 'after applying, the actual current message becomes the selected swipe');
             await page.getByRole('button',{name:'미리보기 닫기'}).click();
