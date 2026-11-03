@@ -149,10 +149,6 @@ export function setMessageBookmark(chat, metadata, index, value, idFactory = mak
     const valid = typeof previous === 'string' && previous.length > 0 &&
         previous.length <= 200 && !reserved.includes(previous);
     const unique = valid && !chat.some((m,i) => i !== index && m?.[MESSAGE_KEY] === previous);
-    if (!value) {
-        if (unique && metadata?.[DATA_KEY]?.bookmarks) delete metadata[DATA_KEY].bookmarks[previous];
-        return true;
-    }
     let id = unique ? previous : null;
     if (!id) {
         for (let attempt = 0; attempt < 12; attempt++) {
@@ -165,6 +161,23 @@ export function setMessageBookmark(chat, metadata, index, value, idFactory = mak
         }
     }
     if (!id) throw new Error('중복되지 않는 메시지 ID를 발급할 수 없습니다.');
+    if (!value) {
+        if (unique) {
+            if (metadata?.[DATA_KEY]?.bookmarks) delete metadata[DATA_KEY].bookmarks[previous];
+        } else {
+            // When a branch or paste duplicated a message ID, split only this
+            // message's identity, preserving its custom title separately.
+            const title = metadata?.[DATA_KEY]?.titles?.[previous];
+            if (typeof title === 'string') {
+                if (!metadata[DATA_KEY].titles || Array.isArray(metadata[DATA_KEY].titles)) {
+                    throw new Error('메시지 제목 저장소가 손상되었습니다.');
+                }
+                metadata[DATA_KEY].titles[id] = title;
+            }
+            message[MESSAGE_KEY] = id;
+        }
+        return true;
+    }
     if (!metadata[DATA_KEY] || typeof metadata[DATA_KEY] !== 'object' ||
         Array.isArray(metadata[DATA_KEY])) metadata[DATA_KEY] = { schema: 1, titles: Object.create(null) };
     const store = metadata[DATA_KEY];
