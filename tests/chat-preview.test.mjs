@@ -17,7 +17,7 @@ test('character chat preview parses JSONL header, custom titles and last five in
     const raw=[{chat_metadata:{[DATA_KEY]:{schema:1,titles:{message_2:'두 번째 장면'}}}}];
     for(let i=0;i<15;i++)raw.push({
         name:i%2?'Character':'User',is_user:i%2===0,
-        mes:'내용 '+i+' '+(i===14?'끝'.repeat(600):'가'.repeat(100)),
+        mes:'내용 '+i+' '+(i===14?'끝'.repeat(800):'가'.repeat(100)),
         ...(i===2?{[MESSAGE_KEY]:'message_2'}:{}),
     });
     const before=JSON.stringify(raw);
