@@ -276,13 +276,17 @@ class NavigatorApp {
         this.refreshTimer = setTimeout(() => {
             this.refreshTimer = null;
             this.bindChatScroll();
-            if (this.pendingReset) {
+            const chatChanged = Boolean(this.pendingReset);
+            if (chatChanged) {
                 this.pendingReset = false;
                 this.lastNavigated = -1;
                 this.view.rebuild();
             } else this.view.rebuild({ keepScroll: true });
             this.updateCurrent();
-            this.swipeManager?.scan();
+            // The toolbar observer handles newly added messages in real time.
+            // Scan pre-existing toolbars only on full chat changes, never on
+            // per-token streaming/message updates.
+            if (chatChanged) this.swipeManager?.scan();
         }, 90);
     }
 
