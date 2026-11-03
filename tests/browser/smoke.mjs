@@ -112,6 +112,10 @@ async function setupPage(browser, baseURL, messageCount = 23, size = { width: 12
             },
             getTheme: () => 'classic',
             getSkyMode: () => 'auto',
+            libraryRepository: {
+                read:()=>({schemaVersion:2,records:{},folders:[],tags:[]}),
+                importAdditively:()=>({changed:false}),
+            },
             currentLibraryScope: () => {
                 const ctx=window.__stmnContext;
                 return ctx.groupId != null && ctx.groupId !== ''
