@@ -630,7 +630,7 @@ async function run() {
                 'Ordinary Quiet view must remain minimal without batch checkboxes');
             const second=page.locator('.stmn-library-card').nth(1);
             await second.locator('.stmn-quiet-item-menu summary').click();
-            await second.getByRole('button',{name:'파일 작업 · 선택 / 원본 백업'}).click();
+            await second.getByRole('button',{name:'다중 선택 · 정리 / 원본 백업'}).click();
             assert.equal(await page.locator('.stmn-batch-checkbox').count(),2);
             assert.equal(await page.locator('.stmn-batch-checkbox:checked').count(),1);
             await page.getByRole('checkbox',{name:'건물 A 선택'}).check();
@@ -673,12 +673,73 @@ async function run() {
             await page.getByRole('tab',{name:'건물 로비'}).click();
             await page.locator('.stmn-library-card').nth(1).locator('.stmn-quiet-item-menu summary').click();
             await page.locator('.stmn-library-card').nth(1)
-                .getByRole('button',{name:'파일 작업 · 선택 / 원본 백업'}).click();
+                .getByRole('button',{name:'다중 선택 · 정리 / 원본 백업'}).click();
             await page.getByRole('button',{name:'원본 백업 ZIP'}).click();
             await page.waitForFunction(()=>document.querySelector('.stmn-batch-status')?.textContent.includes('404'));
             assert.equal(await page.locator('.stmn-batch-checkbox:checked').count(),1);
             assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
             assert.equal(await page.locator('.stmn-batch-toolbar').isVisible(),true);
+        });
+
+        await check('Q08 Quiet multi-select organizes folders and tags without touching JSONL',async setup=>{
+            const page=await setup(3);
+            const mutationRequests=[];
+            page.on('request',request=>{
+                const url=request.url();
+                if(['/api/chats/save','/api/chats/delete','/api/chats/rename',
+                    '/api/chats/group/save'].some(path=>url.includes(path)))
+                    mutationRequests.push(url);
+            });
+            await page.evaluate(async()=>{
+                const {LibraryRepository}=await import('/library-repository.js');
+                const {emptyLibrary,LIBRARY_KEY}=await import('/library-data.js');
+                const context=window.__stmnContext;
+                const library=emptyLibrary();
+                library.folders=[{id:'f1',name:'진행 중'}];
+                library.tags=[{id:'t1',name:'중요'}];
+                context.extensionSettings={[LIBRARY_KEY]:library};
+                window.__q08Saves=0;
+                context.saveSettingsDebounced=()=>{window.__q08Saves++;};
+                const repo=new LibraryRepository(()=>context);
+                window.__stmnView.callbacks.libraryRepository=repo;
+                window.__stmnView.callbacks.readLibrary=()=>repo.read();
+                window.__stmnView.callbacks.changeLibrary=action=>repo.update(action);
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const second=page.locator('.stmn-library-card').nth(1);
+            await second.locator('.stmn-quiet-item-menu summary').click();
+            await second.getByRole('button',{name:'다중 선택 · 정리 / 원본 백업'}).click();
+            await page.getByRole('checkbox',{name:'건물 A 선택'}).check();
+            assert.equal(await page.locator('.stmn-batch-count').textContent(),'2개 선택');
+            await page.getByRole('button',{name:'일괄 정리'}).click();
+            await page.getByRole('combobox',{name:'일괄 정리 종류'}).selectOption('folder');
+            await page.getByRole('combobox',{name:'일괄 정리 대상 폴더 또는 태그'}).selectOption('f1');
+            await page.getByRole('button',{name:'선택한 채팅에 적용'}).click();
+            let data=await page.evaluate(()=>{
+                const l=window.__stmnContext.extensionSettings.stmn_library_v1;
+                return {records:l.records,writes:window.__q08Saves};
+            });
+            assert.equal(data.records['["character:none","chat-a"]'].folderId,'f1');
+            assert.equal(data.records['["character:none","chat-b"]'].folderId,'f1');
+            assert.equal(data.writes,1,'two chat edits must request one settings save');
+
+            await page.getByRole('button',{name:'일괄 정리'}).click();
+            await page.getByRole('combobox',{name:'일괄 정리 종류'}).selectOption('tag-add');
+            await page.getByRole('combobox',{name:'일괄 정리 대상 폴더 또는 태그'}).selectOption('t1');
+            await page.getByRole('button',{name:'선택한 채팅에 적용'}).click();
+            data=await page.evaluate(()=>{
+                const l=window.__stmnContext.extensionSettings.stmn_library_v1;
+                return {records:l.records,writes:window.__q08Saves};
+            });
+            assert.deepEqual(data.records['["character:none","chat-a"]'].tagIds,['t1']);
+            assert.deepEqual(data.records['["character:none","chat-b"]'].tagIds,['t1']);
+            assert.equal(data.writes,2);
+            assert.deepEqual(mutationRequests,[]);
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+            await page.getByRole('button',{name:'완료'}).click();
+            assert.equal(await page.locator('.stmn-batch-toolbar').isVisible(),false);
         });
 
         await check('Q06 native message toolbar saves favorites/tags, filters, compares and selects swipe', async setup => {

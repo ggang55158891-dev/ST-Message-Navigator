@@ -1602,3 +1602,28 @@
 #stmn-root[data-elevator-theme="quiet"] .stmn-file-action-buttons .stmn-file-action-submit:not(:disabled) {
     background:#414e44;color:white;
 }
+
+
+/* Q-08: selected-chat organization, hidden until explicitly opened.
+ * One lightweight inline form; no permanent drawer or duplicate toolbar. */
+#stmn-root .stmn-batch-organize[hidden] {display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-organize:not([hidden]) {
+    display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+    flex-basis:100%;width:100%;
+    padding:9px 0 2px;border-top:1px solid #e5e9e5;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-organize-caption {
+    display:block;flex-basis:100%;font-size:11px;
+    color:#78847a;line-height:1.6;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-organize select {
+    min-width:110px;max-width:100%;padding:6px 8px;
+    background:#fff;color:#455047;border:1px solid #dfe4df;
+    border-radius:9px;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-organize select[hidden] {
+    display:none!important;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-batch-organize :is(select,button):focus-visible {
+    outline:2px solid #526859;outline-offset:2px;
+}
