@@ -235,6 +235,7 @@ async function run() {
         await check('actual extension settings select applies Quiet, persists, and survives reload', async setup => {
             const page = await setup(2, undefined, true);
             const themeSelect = page.locator('#stmn-elevator-theme');
+            await page.locator('#stmn-settings > details > summary').click();
             assert.equal(await themeSelect.inputValue(), 'classic');
             await themeSelect.selectOption('quiet');
             const selected = await page.evaluate(() => {
@@ -258,6 +259,7 @@ async function run() {
             assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(), true);
             await page.reload();
             await bootSettingsApp(page);
+            await page.locator('#stmn-settings > details > summary').click();
             assert.equal(await page.locator('#stmn-elevator-theme').inputValue(), 'quiet',
                 'Saved Quiet preference should be restored on startup');
             assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'), 'quiet');
