@@ -557,6 +557,74 @@ async function run() {
             }), { saves: 1, untouched: 123, chats: 1, alias: '테스트 건물' });
         });
 
+        await check('Q02 Quiet cards preserve v1 aliases, edit descriptions and expose message actions', async setup => {
+            const page = await setup(23);
+            await page.evaluate(async () => {
+                const { LibraryRepository } = await import('/library-repository.js');
+                const { chatReference, emptyLibrary, emptyRecord, LIBRARY_KEY } =
+                    await import('/library-data.js');
+                const { isMessageBookmarked, setMessageBookmark } = await import('/model.js');
+                const ctx = window.__stmnContext;
+                const reference = chatReference('character:none','chat-b');
+                const legacy = emptyLibrary();
+                legacy.schemaVersion = 1;
+                const oldRecord = emptyRecord();
+                delete oldRecord.description;
+                oldRecord.alias = '예전 별명';
+                legacy.records[reference] = oldRecord;
+                ctx.extensionSettings = { [LIBRARY_KEY]:legacy, other_extension:'untouched' };
+                window.__q02SaveCount = 0;
+                ctx.saveSettingsDebounced = () => { window.__q02SaveCount++; };
+                const repo = new LibraryRepository(()=>ctx);
+                window.__stmnView.callbacks.readLibrary = () => repo.read();
+                window.__stmnView.callbacks.changeLibrary = action => repo.update(action);
+                window.__stmnView.callbacks.currentLibraryScope = () => 'character:none';
+                window.__stmnView.callbacks.isBookmarked = index =>
+                    isMessageBookmarked(ctx.chat[index],ctx.chatMetadata);
+                window.__stmnView.callbacks.toggleBookmark = async index => {
+                    setMessageBookmark(ctx.chat,ctx.chatMetadata,index,true,()=> 'bookmark-'+index);
+                    window.__stmnView.renderRows(true);
+                };
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.locator('.stmn-quiet-bookmark').first().click();
+            assert.equal(await page.locator('.stmn-quiet-bookmark').first().getAttribute('aria-pressed'),'true');
+            await page.locator('.stmn-row').first().getByRole('button',{name:/내용 미리보기/}).click();
+            assert.equal(await page.locator('.stmn-quiet-message-preview').isVisible(),true);
+            await page.getByRole('button',{name:'미리보기 닫기'}).click();
+
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const card=page.locator('.stmn-library-card').filter({
+                has: page.locator('.stmn-building-card-title',{hasText:'건물 B'})
+            });
+            await card.waitFor();
+            assert.equal(await card.locator('.stmn-building-card-title').textContent(),'건물 B');
+            assert.equal(await page.evaluate(()=>window.__q02SaveCount),0,
+                'reading legacy v1 must not migrate stored data');
+            await card.getByRole('button',{name:'건물 B 설명 수정'}).click();
+            await card.locator('.stmn-quiet-description-input').fill('차분한 겨울의 이야기');
+            await card.locator('.stmn-quiet-description-editor').getByRole('button',{name:'저장'}).click();
+            const after=await page.evaluate(()=>{
+                const data=window.__stmnContext.extensionSettings.stmn_library_v1;
+                const record=Object.values(data.records)[0];
+                return {version:data.schemaVersion,alias:record.alias,description:record.description,
+                    writes:window.__q02SaveCount,unchanged:window.__stmnContext.extensionSettings.other_extension,
+                    chatId:window.__stmnContext.chatId};
+            });
+            assert.deepEqual(after,{version:2,alias:'예전 별명',description:'차분한 겨울의 이야기',
+                writes:1,unchanged:'untouched',chatId:'chat-a'});
+            assert.equal(await card.locator('.stmn-quiet-chat-description').textContent(),'차분한 겨울의 이야기');
+            await card.getByLabel('건물 B 관리 메뉴').click();
+            await card.getByRole('button',{name:'분류 · 폴더 / 태그'}).click();
+            assert.equal(await card.locator('.stmn-library-details').evaluate(el=>el.open),true);
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('classic','auto'));
+            assert.equal(await page.locator('.stmn-building-card-title').filter({hasText:'예전 별명'}).count(),1,
+                'legacy alias remains functional in classic');
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('quiet','auto'));
+            assert.equal(await page.locator('.stmn-building-card-title').filter({hasText:'건물 B'}).count(),1);
+        });
+
         await check('D library aliases, favorites, folder assignment and persistence', async setup => {
             const page = await setup(23);
             await page.evaluate(async () => {
