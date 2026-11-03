@@ -181,9 +181,12 @@ export class QuietChatPreviewUI {
     async openDetail(item) {
         const scope=this.owner.scope;
         if(!this.isCurrent(item,scope)) return;
-        this.hideTooltip();
+        // Mark this target as a detail consumer BEFORE hiding the focus
+        // tooltip. Otherwise a direct click can abort its shared in-flight
+        // fetch and leave a blank detail view.
         const key=this.key(item);
         this.detailKey=key;
+        this.hideTooltip();
         const serial=++this.detailSerial;
         this.detail.hidden=false;
         this.detailTitle.textContent=item.name;
