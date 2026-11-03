@@ -97,6 +97,6 @@ test('Q08 repository makes one save request, no-op skips save and rejected save 
     assert.equal(settings[LIBRARY_KEY],previous,'rollback must restore original object reference');
     ctx.groupId=7;
     assert.throws(()=>repo.bulkUpdate({scope,ids:['chat-a'],availableIds:ids,
-        operation:'favorite-remove'}),/범위/);
+        operation:'favorite-remove'}),/변경/);
     assert.equal(writes,2,'stale scope must be rejected before settings save');
 });
