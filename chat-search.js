@@ -76,7 +76,7 @@ export async function readBoundedChatResponse(response,{
     if(!response?.ok)throw new Error('채팅 조회 오류 (HTTP '+(response?.status??'?')+')');
     const indicated=Number(response.headers?.get?.('content-length'));
     if(Number.isFinite(indicated) && indicated>maxBytes)
-        throw new Error('6MB 제한을 초과한 채팅은 건너뜁니다.');
+        throw new Error('서버 응답 크기 제한('+Math.ceil(maxBytes/1048576)+'MB)을 초과하여 건너뜁니다.');
     if(!response.body || typeof response.body.getReader!=='function')
         throw new Error('크기 제한을 지원하는 스트림 조회가 필요합니다.');
     const reader=response.body.getReader();
@@ -89,7 +89,7 @@ export async function readBoundedChatResponse(response,{
             const {done,value}=await reader.read();
             if(done)break;
             total+=value.byteLength;
-            if(total>maxBytes)throw new Error('6MB 제한을 초과한 채팅은 건너뜁니다.');
+            if(total>maxBytes)throw new Error('서버 응답 크기 제한('+Math.ceil(maxBytes/1048576)+'MB)을 초과하여 건너뜁니다.');
             text+=decoder.decode(value,{stream:true});
         }
         text+=decoder.decode();
