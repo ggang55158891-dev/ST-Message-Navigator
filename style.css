@@ -1716,3 +1716,16 @@
     }
     #stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-scopes {gap:6px 10px}
 }
+
+
+/* E-03B: opt-in server-side candidate discovery is a secondary action. */
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search .stmn-chat-search-server {
+    background:#f1f4f0;color:#3f5746;border:1px solid #d5dfd7;
+    border-radius:9px;padding:7px 11px;cursor:pointer;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-server:disabled {
+    opacity:.45;cursor:default;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-server:focus-visible {
+    outline:2px solid #728977;outline-offset:2px;
+}
