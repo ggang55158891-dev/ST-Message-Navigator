@@ -38,10 +38,34 @@ export function searchExcerpt(text,query){
         (start+SEARCH_SNIPPET_CHARS<raw.length?'…':'');
 }
 
+/** Pure per-message projection. Never retains raw text outside the call. */
+export function matchSearchMessage(message,metadata,{query,needle,titles=true,body=true,swipes=false}){
+    if(!message || typeof message!=='object' || Array.isArray(message))return null;
+    const raw=String(message.mes??'');
+    const title=titles?getTitle(message,metadata):'';
+    const titleHit=titles && title.toLocaleLowerCase().includes(needle);
+    const bodyHit=body && raw.toLocaleLowerCase().includes(needle);
+    let swipeIndex=-1;
+    if(swipes && Array.isArray(message.swipes)){
+        swipeIndex=message.swipes.findIndex(text=>
+            typeof text==='string' && text.toLocaleLowerCase().includes(needle));
+    }
+    if(!titleHit&&!bodyHit&&swipeIndex<0)return null;
+    const field=titleHit?'title':bodyHit?'body':'swipe';
+    const target=field==='title'?title:field==='body'?raw:message.swipes[swipeIndex];
+    return {
+        type:'message',field,title:titleHit?title:getTitle(message,metadata),
+        excerpt:searchExcerpt(target,query),
+        ...(field==='swipe'?{swipeIndex}:{}),
+    };
+}
+
 /** Message indices remain original #0-based positions, including malformed rows. */
-export function projectChatMatches(records,{query,titles=true,body=true,limit=SEARCH_MAX_PER_CHAT}={}){
+export function projectChatMatches(records,{
+    query,titles=true,body=true,swipes=false,limit=SEARCH_MAX_PER_CHAT,
+}={}){
     const needle=normalizeSearchQuery(query).toLocaleLowerCase();
-    if(!titles&&!body)return [];
+    if(!titles&&!body&&!swipes)return [];
     if(!Array.isArray(records))throw new Error('채팅 데이터 형식이 올바르지 않습니다.');
     const header=records[0] && typeof records[0]==='object' && !Array.isArray(records[0]) &&
         has(records[0],'chat_metadata');
@@ -49,28 +73,18 @@ export function projectChatMatches(records,{query,titles=true,body=true,limit=SE
     const metadata=header?records[0].chat_metadata:{};
     const result=[];
     for(let i=start;i<records.length;i++){
-        const message=records[i];
-        if(!message || typeof message!=='object' || Array.isArray(message))continue;
-        const raw=String(message.mes??'');
-        // Automatic titles have already been derived from mes by getTitle.
-        const title=titles?getTitle(message,metadata):'';
-        const titleHit=titles && title.toLocaleLowerCase().includes(needle);
-        const bodyHit=body && raw.toLocaleLowerCase().includes(needle);
-        if(!titleHit&&!bodyHit)continue;
-        result.push({
-            index:i-start,
-            type:'message',
-            field:titleHit?'title':'body',
-            title:titleHit?title:getTitle(message,metadata),
-            excerpt:searchExcerpt(titleHit&&!bodyHit?title:raw,query),
+        const match=matchSearchMessage(records[i],metadata,{
+            query,needle,titles,body,swipes,
         });
+        if(!match)continue;
+        result.push({...match,index:i-start});
         if(result.length>=limit)break;
     }
     return result;
 }
 
 /** Never rely on Content-Length: read and enforce the cap as bytes arrive. */
-export async function readBoundedChatResponse(response,{
+export async function readBoundedResponseText(response,{
     signal,maxBytes=SEARCH_CHAT_BYTES,
 }={}){
     if(!response?.ok)throw new Error('채팅 조회 오류 (HTTP '+(response?.status??'?')+')');
@@ -100,9 +114,17 @@ export async function readBoundedChatResponse(response,{
         reader.releaseLock();
     }
     if(signal?.aborted)throw new DOMException('취소됨','AbortError');
+    return text;
+}
+
+/** Existing E-03A array decoder, reusing the size-bounded stream reader. */
+export async function readBoundedChatResponse(response,options={}){
     let parsed;
-    try{parsed=JSON.parse(text);}
-    catch{throw new Error('채팅의 JSON 응답을 읽을 수 없습니다.');}
+    try{parsed=JSON.parse(await readBoundedResponseText(response,options));}
+    catch(error){
+        if(error instanceof SyntaxError)throw new Error('채팅의 JSON 응답을 읽을 수 없습니다.');
+        throw error;
+    }
     if(!Array.isArray(parsed))throw new Error('채팅 메시지 배열이 아닙니다.');
     return parsed;
 }
