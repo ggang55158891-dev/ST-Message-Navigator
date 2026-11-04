@@ -70,6 +70,14 @@ export function serverMatchesReorderedBackup(beforeRaw,afterRaw,order){
     validateReorderOrder(order,order.length);
     const before=parseChatJsonl(beforeRaw),after=parseChatJsonl(afterRaw);
     if(before.length!==order.length+1 || after.length!==before.length)return false;
+    // ST may mark metadata.tainted when applying a reorder. All other chat
+    // metadata (including title/bookmark/swipe records and third-party keys)
+    // must survive the save with exactly the same JSON-visible values.
+    const beforeMeta={...before[0].chat_metadata};
+    const afterMeta={...after[0].chat_metadata};
+    delete beforeMeta.tainted;
+    delete afterMeta.tainted;
+    if(JSON.stringify(beforeMeta)!==JSON.stringify(afterMeta))return false;
     for(let i=0;i<order.length;i++){
         if(JSON.stringify(before[order[i]+1])!==JSON.stringify(after[i+1]))return false;
     }
