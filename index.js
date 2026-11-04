@@ -113,6 +113,12 @@ class NavigatorApp {
             {
                 readLibrary: () => this.library.read(),
                 importLibrary: incoming => this.library.importAdditively(incoming),
+                onCoverRestored: async()=>{
+                    const owner=this.view.elevator;
+                    if(this.view.panelOpen && owner?.tab==='buildings'){
+                        await owner.refreshBuildings(true);
+                    }
+                },
             },
         );
         this.bindChatScroll();
