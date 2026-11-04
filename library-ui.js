@@ -7,6 +7,8 @@ import { QuietChatPreviewUI } from './chat-preview-ui.js';
 import { BatchFileUI } from './batch-file-ui.js';
 import { FileActionUI } from './file-action-ui.js';
 import { ChatSearchUI } from './chat-search-ui.js';
+import {ChatCoverStore,isLocalCoverRef} from './chat-cover-store.js';
+import {downloadBackupBlob} from './file-backup.js';
 
 const make = (tag, className = '', text) => {
     const el = document.createElement(tag);
@@ -48,6 +50,7 @@ export class LibraryLobby {
         this.drawerOpen = false;
         this.expandedFolderKeys = new Set();
         this.folderPageLimits = new Map();
+        this.coverStore=new ChatCoverStore();
         const host = owner.buildingsPane;
         this.controls = make('div', 'stmn-library-controls');
         const selectorRow = make('div', 'stmn-library-selectors');
@@ -392,7 +395,16 @@ export class LibraryLobby {
             ].filter(Boolean);
             info.append(make('small','stmn-building-card-meta',badges.join(' · ')));
             if (item.tagNames.length) info.append(make('small','stmn-library-tags',item.tagNames.map(x=>'#'+x).join(' ')));
-            enter.append(facade, info, make('span','stmn-building-enter',current ? '●' : '›'));
+            if(quiet && isLocalCoverRef(item.imageRef)){
+                const image=make('img','stmn-chat-cover-thumb');
+                image.alt='';
+                image.setAttribute('aria-hidden','true');
+                image.loading='lazy';
+                image.decoding='async';
+                image.hidden=true;
+                this.coverStore.mountPreview(image,item.imageRef);
+                enter.append(facade,image,info,make('span','stmn-building-enter',current ? '●' : '›'));
+            }else enter.append(facade,info,make('span','stmn-building-enter',current ? '●' : '›'));
             const favorite = button(item.favorite ? '★' : '☆','stmn-library-favorite',() => {
                 try { this.mutate({kind:'chat',type:'favorite',reference:item.reference,value:!item.favorite}); }
                 catch(error){ this.error.textContent = error.message; }
@@ -448,6 +460,69 @@ export class LibraryLobby {
                 const infoEdit = button('정보 편집 · 채팅 설명', 'stmn-quiet-menu-item', () => {
                     menu.open = false; showDescriptionEditor();
                 });
+                // File picker is created only for the visible item and
+                // performs no read until a user explicitly chooses a file.
+                const coverInput=make('input','stmn-chat-cover-file');
+                coverInput.type='file';
+                coverInput.accept='image/png,image/jpeg,image/webp';
+                coverInput.hidden=true;
+                coverInput.setAttribute('aria-label',item.name+' 표지 이미지 선택');
+                wrapper.append(coverInput);
+                const targetIsCurrent=()=>{
+                    if(owner.busy || owner.scope!==owner.callbacks.currentLibraryScope() ||
+                       !owner.buildings.some(b=>cleanChatId(b.id)===cleanChatId(item.id)) ||
+                       !this.data || this.data.records[item.reference]?.imageRef!==item.imageRef &&
+                           (this.data.records[item.reference]?.imageRef||null)!==(item.imageRef||null))
+                        throw new Error('채팅 정보가 변경됐습니다. 새로고침 후 다시 시도해 주세요.');
+                };
+                coverInput.addEventListener('change',async()=>{
+                    const file=coverInput.files?.[0];
+                    coverInput.value='';
+                    if(!file)return;
+                    try{
+                        targetIsCurrent();
+                        const ref=await this.coverStore.put(file);
+                        targetIsCurrent();
+                        this.mutate({kind:'chat',type:'image',reference:item.reference,value:ref});
+                        owner.view.setStatus('채팅 표지를 이 브라우저에 저장했습니다. 표지 이미지는 별도로 백업하세요.');
+                    }catch(error){
+                        this.error.textContent='표지 등록 실패: '+(error?.message||'알 수 없는 오류');
+                        owner.view.setStatus(this.error.textContent,true);
+                    }
+                });
+                const uploadCover=button(item.imageRef?'표지 이미지 교체':'표지 이미지 추가',
+                    'stmn-quiet-menu-item',()=>{
+                        menu.open=false;
+                        try{targetIsCurrent();coverInput.click();}
+                        catch(error){this.error.textContent=error.message;}
+                    });
+                const exportCover=button('표지 이미지 별도 백업','stmn-quiet-menu-item',()=>{
+                    menu.open=false;
+                    void (async()=>{
+                        try{
+                            targetIsCurrent();
+                            if(!isLocalCoverRef(item.imageRef))
+                                throw new Error('이 브라우저에 저장된 로컬 표지가 아닙니다.');
+                            const output=await this.coverStore.export(item.imageRef);
+                            targetIsCurrent();
+                            downloadBackupBlob(output.blob,output.filename);
+                            owner.view.setStatus('표지 이미지 다운로드를 요청했습니다. 저장한 파일을 확인해 주세요.');
+                        }catch(error){
+                            this.error.textContent='표지 내보내기 실패: '+error.message;
+                            owner.view.setStatus(this.error.textContent,true);
+                        }
+                    })();
+                });
+                exportCover.disabled=!isLocalCoverRef(item.imageRef);
+                const removeCover=button('표지 연결 해제','stmn-quiet-menu-item',()=>{
+                    menu.open=false;
+                    try{
+                        targetIsCurrent();
+                        if(!window.confirm('이 채팅의 표지를 제거할까요? 원본 채팅 파일은 변경되지 않습니다. 브라우저에 남아 있는 이미지 파일은 자동 삭제하지 않습니다.'))return;
+                        this.mutate({kind:'chat',type:'image',reference:item.reference,value:null});
+                    }catch(error){this.error.textContent=error.message;}
+                });
+                removeCover.disabled=!item.imageRef;
                 const category = button('분류 · 폴더 / 태그', 'stmn-quiet-menu-item', () => {
                     menu.open = false;
                     const details = wrapper.querySelector('.stmn-library-details');
@@ -483,7 +558,7 @@ export class LibraryLobby {
                 if(current){
                     renameFile.title=deleteFile.title='다른 채팅으로 이동해야 변경할 수 있습니다.';
                 }
-                menuBody.append(infoEdit,category,legacy,selectFile,copyFile,renameFile,deleteFile);
+                menuBody.append(infoEdit,uploadCover,exportCover,removeCover,category,legacy,selectFile,copyFile,renameFile,deleteFile);
                 menu.append(summary,menuBody);
                 line.append(editDescription,peek,menu);
             }
@@ -565,6 +640,7 @@ export class LibraryLobby {
         this.fileUI.destroy();
         this.fileActions.destroy();
         this.searchUI.destroy();
+        this.coverStore.destroy();
         this.folderDrawer.remove();
         this.expandedFolderKeys.clear();
         this.folderPageLimits.clear();
