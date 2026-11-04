@@ -2075,3 +2075,51 @@
 #stmn-root .stmn-single-message-dialog :is(button,input):focus-visible{
     outline:2px solid #778f7d;outline-offset:2px;
 }
+
+
+/* E-03C explicit one-chat precision scan, no background crawler. */
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-detail-controls{
+    flex:1 1 100%;display:flex;align-items:center;gap:7px;
+    flex-wrap:wrap;border-top:1px solid #e8ece5;padding-top:8px;min-width:0;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-target-label{
+    display:flex;align-items:center;gap:6px;flex:1 1 180px;min-width:0;
+    font-size:10px;color:#6b796e;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-target{
+    flex:1;min-width:0;width:50px;max-width:100%;
+    border:1px solid #dfe6dc;border-radius:8px;padding:7px;
+    background:#fff;color:#405143;font:inherit;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search .stmn-chat-search-detail{
+    border:1px solid #cad7ce;border-radius:9px;background:#eaf1e9;
+    color:#35533e;padding:7px 10px;font-size:11px;cursor:pointer;
+    flex:1 1 170px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search .stmn-chat-search-detail:disabled{
+    opacity:.48;cursor:default;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-candidate-row{
+    display:flex;align-items:stretch;gap:5px;min-width:0;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-candidate-row .stmn-chat-search-result{
+    flex:1;min-width:0;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-candidate-exact{
+    flex:none;max-width:92px;white-space:normal;
+    border:1px solid #d6e2d5;border-radius:9px;background:#f0f5ee;
+    color:#405d45;padding:6px;font-size:10px;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-search :is(
+    .stmn-chat-search-target,.stmn-chat-search-detail,
+    .stmn-chat-search-candidate-exact):focus-visible{
+    outline:2px solid #728977;outline-offset:2px;
+}
+@media(max-width:480px){
+    #stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-detail-controls{
+        gap:5px;padding-top:5px;
+    }
+    #stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-candidate-exact{
+        max-width:74px;font-size:9px;
+    }
+}

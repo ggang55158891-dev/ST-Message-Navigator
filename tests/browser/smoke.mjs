@@ -1443,6 +1443,121 @@ async function run() {
             assert.equal(await page.locator('.stmn-batch-toolbar').isVisible(),true);
         });
 
+        await check('E03C server candidate drills down to precise #message and alternate swipe without saving chat',async setup=>{
+            const page=await setup(4);
+            const writes=[],exports=[],searches=[];
+            const lines=[
+                {chat_metadata:{}},
+                {name:'User',mes:'평범한 대화',swipes:['다른 결말','아무 일도 없음']},
+                {name:'Character',mes:'대답을 잊지 마',swipes:['무관한 답','숨겨진 약속'],
+                    swipe_id:0},
+                {name:'Character',mes:'그냥 지나간 말',swipes:['대답']},
+            ];
+            await page.route('**/api/chats/search',async route=>{
+                searches.push(route.request().postDataJSON());
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify([{file_name:'chat-b.jsonl'}])});
+            });
+            await page.route('**/api/chats/export',async route=>{
+                exports.push(route.request().postDataJSON().file);
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:lines.map(row=>JSON.stringify(row)).join('\n')+'\n'})});
+            });
+            page.on('request',req=>{
+                if(['/api/chats/save','/api/chats/rename','/api/chats/delete']
+                    .some(path=>req.url().includes(path)))writes.push(req.url());
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-quiet-list-menu summary').click();
+            await page.getByRole('button',{name:'통합 검색 · 메시지 제목/본문'}).click();
+            await page.getByRole('searchbox',{name:'통합 검색어'}).fill('숨겨진 약속');
+            assert.deepEqual(exports,[],'opening and typing must not fetch any chat body');
+            await page.getByRole('button',{name:'대용량 본문 후보 찾기 · 서버 검색'}).click();
+            await page.getByRole('button',{name:'정확한 #번호 찾기',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#1'));
+            assert.deepEqual(exports,['chat-b.jsonl']);
+            assert.equal(searches.length,1);
+            assert.match(await page.locator('.stmn-chat-search-result').textContent(),/스와이프 2번 일치/);
+            assert.match(await page.locator('.stmn-chat-search-status').textContent(),/1개 위치/);
+            await page.locator('.stmn-chat-search-result').click();
+            await page.waitForFunction(()=>window.__stmnContext.chatId==='chat-b');
+            assert.ok(await page.evaluate(()=>window.__stmnActions.includes(1)));
+            assert.deepEqual(writes,[]);
+        });
+
+        await check('E03C chosen chat exact scan finds custom title and inactive swipe, active scan has zero fetch',async setup=>{
+            const page=await setup(4);
+            const gets=[];
+            const file=[
+                {chat_metadata:{stmn_message_outline_v1:{titles:{named:'바람의 이름'}}}},
+                {name:'Bot',mes:'다른 장면',swipes:['하나','숨겨진 제목']},
+                {name:'Bot',mes:'평범',stmn_message_id_v1:'named'},
+            ];
+            await page.route('**/api/chats/export',async route=>{
+                gets.push(route.request().postDataJSON().file);
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:file.map(x=>JSON.stringify(x)).join('\n')+'\n'})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+                window.__stmnContext.chat[3].mes='현재 채팅만 있는 특별한 메시지';
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-quiet-list-menu summary').click();
+            await page.getByRole('button',{name:'통합 검색 · 메시지 제목/본문'}).click();
+            const input=page.getByRole('searchbox',{name:'통합 검색어'});
+            const selector=page.getByRole('combobox',{name:'정밀 검색 대상 채팅'});
+            assert.equal(await selector.inputValue(),'chat-a');
+            await input.fill('특별한 메시지');
+            await page.getByRole('button',{name:/선택한 채팅의 정확한 #번호 찾기/}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#3'));
+            assert.deepEqual(gets,[]);
+            await selector.selectOption('chat-b');
+            await input.fill('숨겨진 제목');
+            await page.getByRole('button',{name:/선택한 채팅의 정확한 #번호 찾기/}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#0'));
+            assert.match(await page.locator('.stmn-chat-search-result').textContent(),/스와이프 2번 일치/);
+            await input.fill('바람의 이름');
+            await page.getByRole('button',{name:/선택한 채팅의 정확한 #번호 찾기/}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#1'));
+            assert.deepEqual(gets,['chat-b.jsonl','chat-b.jsonl']);
+        });
+
+        await check('E03C 32MB response limit and tab-change abort show no stale message locations',async setup=>{
+            const page=await setup(4);
+            let requests=0;
+            await page.route('**/api/chats/export',async route=>{
+                requests++;
+                await route.fulfill({status:200,contentType:'application/json',
+                    headers:{'content-length':String(32*1024*1024+1)},
+                    body:'{"result":"ignored"}'});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-quiet-list-menu summary').click();
+            await page.getByRole('button',{name:'통합 검색 · 메시지 제목/본문'}).click();
+            await page.getByRole('combobox',{name:'정밀 검색 대상 채팅'}).selectOption('chat-b');
+            await page.getByRole('searchbox',{name:'통합 검색어'}).fill('찾기');
+            await page.getByRole('button',{name:/선택한 채팅의 정확한 #번호 찾기/}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-status')?.textContent.includes('제한'));
+            assert.equal(requests,1);
+            assert.equal(await page.locator('.stmn-chat-search-result').count(),0);
+            await page.getByRole('tab',{name:'층 안내'}).click();
+            assert.equal(await page.locator('.stmn-chat-search').isVisible(),false);
+            assert.equal(await page.locator('.stmn-chat-search-result').count(),0);
+        });
+
         await check('E03B explicit server search finds chat candidate without downloading full files',async setup=>{
             const page=await setup(3);
             const reads=[],writes=[],queries=[];
