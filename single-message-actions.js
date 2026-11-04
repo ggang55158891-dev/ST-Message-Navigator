@@ -161,12 +161,15 @@ export class SingleMessageActions{
                 ensureRendered:async(index,ctx)=>{
                     const chat=getChatElement();
                     if(getRenderedMessage(chat,index))return true;
-                    const rendered=await ensureMessageRendered(ctx,index,
-                        ()=>!this.selection || (()=>{try{
+                    const obsolete=()=>{
+                        try{
+                            if(!this.selection)return true;
                             ensureSelectionCurrent(this.view.callbacks.context(),this.selection);
                             return false;
-                        }catch{return true;}})(),
-                        text=>{this.status.textContent=text;});
+                        }catch{return true;}
+                    };
+                    const rendered=await ensureMessageRendered(ctx,index,
+                        obsolete,text=>{this.status.textContent=text;});
                     return Boolean(rendered && getRenderedMessage(rendered,index));
                 },
             });
