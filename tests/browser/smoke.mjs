@@ -533,7 +533,7 @@ async function run() {
 
         await check('Q09 Quiet copy stages new chat and verifies source/destination before metadata clone',async setup=>{
             const page=await setup(3);
-            const raw='{"chat_metadata":{}}\\n{"mes":"원문 복제","swipes":["하나","둘"]}\\n';
+            const raw='{"chat_metadata":{}}\n{"mes":"원문 복제","swipes":["하나","둘"]}\n';
             const files=new Map([['chat-b',raw]]);
             const calls=[];
             await page.route('**/api/chats/export',async route=>{
@@ -550,7 +550,7 @@ async function run() {
             await page.route('**/api/chats/save',async route=>{
                 const payload=route.request().postDataJSON();
                 calls.push({action:'save',id:payload.file_name});
-                files.set(payload.file_name,payload.chat.map(x=>JSON.stringify(x)).join('\\n'));
+                files.set(payload.file_name,payload.chat.map(x=>JSON.stringify(x)).join('\n'));
                 await route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});
             });
             await page.route('**/api/chats/rename',async route=>{
