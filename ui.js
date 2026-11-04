@@ -1,6 +1,7 @@
 import { DATA_KEY, MESSAGE_KEY, automaticTitle, getTitle, isCustomTitle } from './model.js';
 import { ElevatorPanel } from './elevator-ui.js';
 import { MessageBatchUI } from './message-batch-ui.js';
+import { MessageReorderUI } from './message-reorder-ui.js';
 import { withQuietPreview, previewSwipes, messageTooltipText, QUIET_DETAIL_HEIGHT } from './quiet-preview.js';
 import { installExtensionUpdateUI } from './update-ui.js';
 import { installDiagnosticsSettings } from './diagnostics-ui.js';
@@ -200,6 +201,7 @@ export class NavigatorView {
         this.panel.append(header, this.caption, searchbox, this.groupTools, this.list, this.outlineJumps, this.footer, this.panelResize);
         this.elevator = new ElevatorPanel(this, callbacks);
         this.messageBatch = new MessageBatchUI(this);
+        this.reorderUI = new MessageReorderUI(this);
         this.root.append(this.nav, this.panel);
         document.body.append(this.root);
         this.onKeydown = event => {
@@ -832,6 +834,7 @@ export class NavigatorView {
         window.removeEventListener('pointermove', this.onNavPointerMove);
         window.removeEventListener('pointerup', this.onNavPointerEnd);
         window.removeEventListener('pointercancel', this.onNavPointerEnd);
+        this.reorderUI?.destroy();
         this.messageBatch?.destroy();
         this.elevator?.destroy();
         this.root.remove();
