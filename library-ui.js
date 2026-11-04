@@ -462,6 +462,11 @@ export class LibraryLobby {
                     menu.open=false;
                     this.fileUI.enable(true,item);
                 });
+                const copyFile=button('채팅 파일 복제', 'stmn-quiet-menu-item',
+                    () => {
+                        menu.open=false;
+                        void this.fileActions.begin('copy',item);
+                    });
                 const renameFile=button('파일 이름 변경', 'stmn-quiet-menu-item',
                     () => {
                         menu.open=false;
@@ -478,7 +483,7 @@ export class LibraryLobby {
                 if(current){
                     renameFile.title=deleteFile.title='다른 채팅으로 이동해야 변경할 수 있습니다.';
                 }
-                menuBody.append(infoEdit,category,legacy,selectFile,renameFile,deleteFile);
+                menuBody.append(infoEdit,category,legacy,selectFile,copyFile,renameFile,deleteFile);
                 menu.append(summary,menuBody);
                 line.append(editDescription,peek,menu);
             }
