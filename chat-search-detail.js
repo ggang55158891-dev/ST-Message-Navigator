@@ -34,7 +34,8 @@ export async function projectDetailedChatMatches(records,{
     if(!Number.isInteger(limit)||limit<1||limit>SEARCH_MAX_RESULTS ||
        !Number.isInteger(yieldEvery)||yieldEvery<1||yieldEvery>2000)
         throw new Error('정밀 검색 작업 제한이 올바르지 않습니다.');
-    const header=records[0] && Object.prototype.hasOwnProperty.call(records[0],'chat_metadata');
+    const header=records[0] && typeof records[0]==='object' && !Array.isArray(records[0]) &&
+        Object.prototype.hasOwnProperty.call(records[0],'chat_metadata');
     const start=header?1:0,metadata=header?records[0].chat_metadata:{};
     const matches=[];
     let truncated=false,scanned=0;
@@ -69,7 +70,8 @@ export async function readDetailedChatMatches({
     const stillValid=()=>{
         const latest=context();
         if(buildingScope(latest)!==scope || latest.chat!==chatRef ||
-           cleanChatId(latest.chatId)!==activeId)return false;
+           cleanChatId(latest.chatId)!==activeId ||
+           latest.chatMetadata!==ctx.chatMetadata)return false;
         try{
             return validateChatPreviewTarget(latest,scope,buildings,item).id===target.id;
         }catch{return false;}
