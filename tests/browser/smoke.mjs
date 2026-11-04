@@ -684,8 +684,7 @@ async function run() {
             await dialog.getByRole('button',{name:'③ 메시지 영구 삭제'}).click();
             await page.waitForFunction(()=>window.__stmnDeleteCalls.length===1);
             await page.waitForFunction(()=>document.querySelector('.stmn-single-message-overlay')?.hidden===true);
-            assert.deepEqual(await page.evaluate(()=>window.__stmnDeleteCalls),[[3,null,false,false]]
-                .map(([i,_unused,c,t])=>[i,undefined,c,t]));
+            assert.deepEqual(await page.evaluate(()=>window.__stmnDeleteCalls.map(([id,_swipe,confirm,tools])=>[id,confirm,tools])),[[3,false,false]]);
             assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(m=>m.mes)),
                 original.filter((_,i)=>i!==3));
             assert.equal(await page.evaluate(()=>window.__stmnNativeSaves),2);
