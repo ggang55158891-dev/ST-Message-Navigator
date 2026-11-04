@@ -742,6 +742,44 @@ async function run() {
             assert.equal(await page.locator('.stmn-batch-toolbar').isVisible(),true);
         });
 
+        await check('E03B explicit server search finds chat candidate without downloading full files',async setup=>{
+            const page=await setup(3);
+            const reads=[],writes=[],queries=[];
+            await page.route('**/api/chats/search',async route=>{
+                queries.push(route.request().postDataJSON());
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify([
+                        {file_name:'chat-b.jsonl'},
+                        {file_name:'outside-character.jsonl'},
+                    ])});
+            });
+            page.on('request',request=>{
+                const url=request.url();
+                if(url.includes('/api/chats/get'))reads.push(url);
+                if(['/api/chats/save','/api/chats/delete','/api/chats/rename']
+                    .some(path=>url.includes(path)))writes.push(url);
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-library-card').first().waitFor();
+            await page.locator('.stmn-quiet-list-menu summary').click();
+            await page.getByRole('button',{name:'통합 검색 · 메시지 제목/본문'}).click();
+            await page.getByRole('searchbox',{name:'통합 검색어'}).fill('독특한 단어');
+            assert.equal(queries.length,0,'no server request until explicit click');
+            await page.getByRole('button',{name:'대용량 본문 후보 찾기 · 서버 검색'}).click();
+            await page.waitForFunction(()=>document.querySelectorAll('.stmn-chat-search-result').length===1);
+            assert.deepEqual(queries,[{query:'독특한 단어',avatar_url:'none'}]);
+            assert.deepEqual(reads,[],'server candidates must avoid browser full-chat reads');
+            assert.match(await page.locator('.stmn-chat-search-result').textContent(),/번호는 채팅을 열어 확인/);
+            await page.locator('.stmn-chat-search-result').click();
+            await page.waitForFunction(()=>window.__stmnContext.chatId==='chat-b');
+            assert.deepEqual(writes,[]);
+        });
+
         await check('E03A Quiet search: metadata-only skips network; body search jumps to correct chat message',async setup=>{
             const page=await setup(3);
             const requests=[],writes=[];

@@ -4,7 +4,7 @@ import {MESSAGE_KEY,DATA_KEY} from '../model.js';
 import {
     SEARCH_BATCH_SIZE,SEARCH_MAX_RESULTS,SEARCH_SNIPPET_CHARS,
     normalizeSearchQuery,metadataMatches,searchExcerpt,projectChatMatches,
-    readBoundedChatResponse,readChatMatches,
+    readBoundedChatResponse,readChatMatches,searchServerBodyCandidates,
 } from '../chat-search.js';
 
 const scope='character:hero.png';
@@ -97,4 +97,78 @@ test('E03A response rejects too-large stream and content length before parsing',
         {maxBytes:300}),/배열/);
     await assert.rejects(readBoundedChatResponse(new Response('not-json'),
         {maxBytes:300}),/JSON/);
+});
+
+
+test('E03B candidate search asks ST server once and excludes out-of-scope file names',async()=>{
+    const calls=[];
+    const state={characterId:0,groupId:null,characters:[{avatar:'hero.png'}],
+        getRequestHeaders:()=>({'Content-Type':'application/json'})};
+    const files=[{id:'a'},{id:'b'}];
+    const result=await searchServerBodyCandidates({
+        context:()=>state,scope:'character:hero.png',buildings:files,query:'검색어',
+        fetcher:async(url,opts)=>{
+            calls.push({url,body:JSON.parse(opts.body),method:opts.method});
+            return Response.json([
+                {file_name:'a.jsonl'},{file_name:'b'},{file_name:'b.jsonl'},
+                {file_name:'another.jsonl'},{file_name:'../outside.jsonl'},
+            ]);
+        },
+    });
+    assert.deepEqual(result,['a','b']);
+    assert.deepEqual(calls,[{
+        url:'/api/chats/search',body:{query:'검색어',avatar_url:'hero.png'},method:'POST',
+    }]);
+});
+
+test('E03B group candidate search cannot leak other group chat names',async()=>{
+    const state={groupId:42,groups:[
+        {id:42,chats:['one','two']},{id:43,chats:['other']},
+    ],getRequestHeaders:()=>({})};
+    const result=await searchServerBodyCandidates({
+        context:()=>state,scope:'group:42',
+        buildings:[{id:'one'},{id:'two'},{id:'other'}],query:'비밀',
+        fetcher:async(url,opts)=>{
+            assert.equal(JSON.parse(opts.body).group_id,42);
+            return Response.json([
+                {file_name:'other'},{file_name:'one'},{file_name:'one'},
+            ]);
+        },
+    });
+    assert.deepEqual(result,['one']);
+});
+
+test('E03B stale-scope and group zero are rejected before network',async()=>{
+    let calls=0;
+    const state={groupId:0,groups:[{id:0,chats:['a']}],getRequestHeaders:()=>({})};
+    const fetcher=()=>{calls++;throw Error('unexpected fetch');};
+    await assert.rejects(searchServerBodyCandidates({
+        context:()=>state,scope:'group:0',buildings:[{id:'a'}],
+        query:'비밀',fetcher,
+    }),/지원되지/);
+    await assert.rejects(searchServerBodyCandidates({
+        context:()=>state,scope:'character:hero.png',buildings:[{id:'a'}],
+        query:'비밀',fetcher,
+    }),/변경/);
+    assert.equal(calls,0);
+});
+
+test('E03B abort and oversized server candidate response are rejected',async()=>{
+    const state={characterId:0,groupId:null,characters:[{avatar:'hero.png'}],
+        getRequestHeaders:()=>({})};
+    const ctl=new AbortController();ctl.abort();
+    let requested=0;
+    await assert.rejects(searchServerBodyCandidates({
+        context:()=>state,scope:'character:hero.png',buildings:[{id:'a'}],
+        query:'비밀',signal:ctl.signal,fetcher:()=>{
+            requested++;return Response.json([{file_name:'a'}]);
+        },
+    }),/AbortError/);
+    assert.equal(requested,0);
+    await assert.rejects(searchServerBodyCandidates({
+        context:()=>state,scope:'character:hero.png',buildings:[{id:'a'}],
+        query:'비밀',fetcher:async()=>new Response('[]',{
+            headers:{'Content-Length':'2000000'},
+        }),
+    }),/제한/);
 });

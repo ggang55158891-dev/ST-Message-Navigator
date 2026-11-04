@@ -76,7 +76,7 @@ export async function readBoundedChatResponse(response,{
     if(!response?.ok)throw new Error('채팅 조회 오류 (HTTP '+(response?.status??'?')+')');
     const indicated=Number(response.headers?.get?.('content-length'));
     if(Number.isFinite(indicated) && indicated>maxBytes)
-        throw new Error('6MB 제한을 초과한 채팅은 건너뜁니다.');
+        throw new Error('서버 응답 크기 제한('+Math.ceil(maxBytes/1048576)+'MB)을 초과하여 건너뜁니다.');
     if(!response.body || typeof response.body.getReader!=='function')
         throw new Error('크기 제한을 지원하는 스트림 조회가 필요합니다.');
     const reader=response.body.getReader();
@@ -89,7 +89,7 @@ export async function readBoundedChatResponse(response,{
             const {done,value}=await reader.read();
             if(done)break;
             total+=value.byteLength;
-            if(total>maxBytes)throw new Error('6MB 제한을 초과한 채팅은 건너뜁니다.');
+            if(total>maxBytes)throw new Error('서버 응답 크기 제한('+Math.ceil(maxBytes/1048576)+'MB)을 초과하여 건너뜁니다.');
             text+=decoder.decode(value,{stream:true});
         }
         text+=decoder.decode();
@@ -126,4 +126,74 @@ export async function readChatMatches(ctx,scope,buildings,item,{
     return {id:cleanChatId(target.id),
         matches:projectChatMatches(records,{query,titles,body}),
     };
+}
+
+
+/**
+ * E-03B (first pass): SillyTavern already exposes /api/chats/search.
+ * It streams chat JSONL SERVER-SIDE and returns matching chat IDs, not
+ * message positions. This is an explicit, read-only candidate search and
+ * is separate from the exact #index scan in E-03A.
+ *
+ * Do not treat its results as an exact text-match or search index: server
+ * matching splits whitespace and searches active mes, not custom titles or
+ * every alternate swipe. In-flight HTTP abort cannot promise server abort.
+ */
+export const SERVER_CANDIDATE_RESPONSE_BYTES=1024*1024;
+export const SERVER_CANDIDATE_MAX_ROWS=2000;
+export async function searchServerBodyCandidates({
+    context,scope,buildings,query,fetcher=fetch,signal,
+}){
+    normalizeSearchQuery(query);
+    const ctx=context();
+    if(buildingScope(ctx)!==scope || !Array.isArray(buildings))
+        throw new Error('현재 캐릭터/그룹 범위가 변경되어 서버 검색을 중단했습니다.');
+    if(typeof ctx.getRequestHeaders!=='function')
+        throw new Error('SillyTavern 인증 헤더를 확인할 수 없습니다.');
+    const group=ctx.groupId!==null && ctx.groupId!==undefined && ctx.groupId!=='';
+    let payload={query};
+    if(group){
+        const item=ctx.groups?.find(row=>String(row.id)===String(ctx.groupId));
+        if(!item || !Array.isArray(item.chats))
+            throw new Error('현재 그룹의 채팅 목록을 확인할 수 없습니다.');
+        // The upstream endpoint treats a falsy group_id as a character
+        // search. Refuse the ambiguous group ID rather than scan elsewhere.
+        if(!ctx.groupId || String(ctx.groupId)==='0')
+            throw new Error('이 그룹 식별자는 서버 본문 검색이 지원되지 않습니다.');
+        payload.group_id=ctx.groupId;
+    }else{
+        const character=ctx.characters?.[ctx.characterId];
+        if(typeof character?.avatar!=='string' || !character.avatar)
+            throw new Error('현재 캐릭터를 확인할 수 없습니다.');
+        payload.avatar_url=character.avatar;
+    }
+    if(signal?.aborted)throw new DOMException('검색 취소','AbortError');
+    const response=await fetcher('/api/chats/search',{
+        method:'POST',headers:ctx.getRequestHeaders(),cache:'no-store',
+        body:JSON.stringify(payload),signal,
+    });
+    const rows=await readBoundedChatResponse(response,{
+        signal,maxBytes:SERVER_CANDIDATE_RESPONSE_BYTES,
+    });
+    if(signal?.aborted)throw new DOMException('검색 취소','AbortError');
+    if(buildingScope(context())!==scope)
+        throw new Error('서버 검색 도중 캐릭터/그룹이 변경됐습니다.');
+    if(rows.length>SERVER_CANDIDATE_MAX_ROWS)
+        throw new Error('서버 후보가 너무 많아 표시하지 않았습니다.');
+    const allowed=new Set(buildings.map(x=>cleanChatId(x.id)));
+    const groupIds=group?new Set(ctx.groups.find(x=>String(x.id)===String(ctx.groupId))
+        .chats.map(cleanChatId)):null;
+    const result=[],seen=new Set();
+    for(const row of rows){
+        if(!row || typeof row!=='object' || Array.isArray(row))continue;
+        const name=row.file_name;
+        if(typeof name!=='string' || name.length>206 ||
+           /[/\\\u0000-\u001f\u007f]/.test(name))continue;
+        const id=cleanChatId(name);
+        if(!id || seen.has(id) || !allowed.has(id) ||
+           (groupIds&&!groupIds.has(id)))continue;
+        seen.add(id);
+        result.push(id);
+    }
+    return result;
 }
