@@ -186,6 +186,9 @@ export class MessageBatchUI{
         this.root.hidden=!visible;
         this.openButton.textContent=this.selectionMode?'다중 선택 종료':'메시지 다중 선택';
         this.openButton.setAttribute('aria-pressed',String(this.selectionMode));
+        // Resetting selection after a save must re-enable the entry point.
+        // Do this even when the controls are hidden in inactive mode.
+        this.openButton.disabled=this.busy;
         this.controls.hidden=!this.selectionMode;
         if(!this.selectionMode)return;
         const indices=[...this.selected.keys()].sort((a,b)=>a-b);
