@@ -471,8 +471,8 @@ export class LibraryLobby {
                 const targetIsCurrent=()=>{
                     if(owner.busy || owner.scope!==owner.callbacks.currentLibraryScope() ||
                        !owner.buildings.some(b=>cleanChatId(b.id)===cleanChatId(item.id)) ||
-                       !this.data || this.data.records[item.reference]?.imageRef!==item.imageRef &&
-                           (this.data.records[item.reference]?.imageRef||null)!==(item.imageRef||null))
+                       !this.data ||
+                       (this.data.records[item.reference]?.imageRef??null)!==(item.imageRef??null))
                         throw new Error('채팅 정보가 변경됐습니다. 새로고침 후 다시 시도해 주세요.');
                 };
                 coverInput.addEventListener('change',async()=>{
