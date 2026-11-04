@@ -608,7 +608,7 @@ async function run() {
                 const raw=await page.evaluate(()=>{
                     const ctx=window.__stmnContext;
                     return [JSON.stringify({chat_metadata:ctx.chatMetadata}),
-                        ...ctx.chat.map(m=>JSON.stringify(m))].join('\\n')+'\\n';
+                        ...ctx.chat.map(m=>JSON.stringify(m))].join('\n')+'\n';
                 });
                 await route.fulfill({status:200,contentType:'application/json',
                     body:JSON.stringify({result:raw})});
