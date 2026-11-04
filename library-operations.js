@@ -156,6 +156,22 @@ export function moveLibraryReference(existing,scope,fromId,toId) {
     delete lib.records[oldKey];
     return {library:validateLibrary(lib),changed:true};
 }
+/** Q-09: copy management metadata without moving or changing its source. */
+export function cloneLibraryReference(existing,scope,source,destination){
+    const lib=validateLibrary(existing);
+    const from=chatReference(scope,source),to=chatReference(scope,destination);
+    if(from===to || Object.hasOwn(lib.records,to))
+        throw new Error('사본 관리 정보가 이미 존재합니다.');
+    const existingRecord=lib.records[from];
+    if(!existingRecord)return {library:lib,changed:false};
+    const copy=structuredClone(existingRecord);
+    copy.lastRead=null;
+    copy.createdAt=null;
+    copy.createdAtSource=null;
+    lib.records[to]=copy;
+    return {library:validateLibrary(lib),changed:true};
+}
+
 export function forgetLibraryReference(existing,scope,id) {
     const lib=validateLibrary(existing);
     const key=chatReference(scope,id);
