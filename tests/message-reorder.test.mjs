@@ -166,6 +166,17 @@ test('Q11 cannot commit duplicate or missing messages with a verified backup',as
     assert.equal(api.writes,1);
 });
 
+test('Q11 server readback also refuses lost title/bookmark or third-party metadata',()=>{
+    const ctx=fixture(),original=raw(ctx);
+    const swapped=[ctx.chat[1],ctx.chat[0],ctx.chat[2],ctx.chat[3]];
+    const modified=structuredClone(ctx.chatMetadata);
+    modified[DATA_KEY].bookmarks={};
+    modified.tainted=true;
+    const after=JSON.stringify({chat_metadata:modified})+'\\n'+
+        swapped.map(m=>JSON.stringify(m)).join('\\n')+'\\n';
+    assert.equal(serverMatchesReorderedBackup(original,after,[1,0,2,3]),false);
+});
+
 test('Q11 content-based readback rejects swaps that lost a swipe or custom ID',()=>{
     const ctx=fixture(),original=raw(ctx);
     const rearranged=[ctx.chat[1],ctx.chat[0],ctx.chat[2],ctx.chat[3]];
