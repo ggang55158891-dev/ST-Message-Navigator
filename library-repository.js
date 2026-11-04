@@ -1,5 +1,5 @@
 /** SillyTavern adapter: library metadata only, lazily accessed on user action. */
-import { changeLibrary, moveLibraryReference, forgetLibraryReference, bulkChangeLibrary } from './library-operations.js';
+import { changeLibrary, moveLibraryReference, forgetLibraryReference, bulkChangeLibrary, cloneLibraryReference } from './library-operations.js';
 import { buildingScope } from './building-data.js';
 import {
     LIBRARY_KEY, validateLibrary, mergeLibrary, librarySummary,
@@ -96,6 +96,26 @@ export class LibraryRepository {
         catch(error) {
             if(previous===undefined)delete settings[LIBRARY_KEY];
             else settings[LIBRARY_KEY]=previous;
+            throw error;
+        }
+        return true;
+    }
+
+    /** Clone user metadata after a verified server copy. Never overwrite a
+     * preexisting destination or change source records. */
+    cloneChatRecord(scope,source,destination){
+        const ctx=this.settingsRoot();
+        if(buildingScope(ctx)!==scope)throw new Error('채팅 범위가 변경됐습니다.');
+        if(typeof ctx.saveSettingsDebounced!=='function')
+            throw new Error('SillyTavern 설정 저장 함수를 사용할 수 없습니다.');
+        const settings=ctx.extensionSettings,before=settings[LIBRARY_KEY];
+        const next=cloneLibraryReference(before,scope,source,destination);
+        if(!next.changed)return false;
+        settings[LIBRARY_KEY]=next.library;
+        try{ctx.saveSettingsDebounced();}
+        catch(error){
+            if(before===undefined)delete settings[LIBRARY_KEY];
+            else settings[LIBRARY_KEY]=before;
             throw error;
         }
         return true;

@@ -531,6 +531,67 @@ async function run() {
             assert.deepEqual(JSON.parse(files.get(restoredName).split('\n')[1]).swipes,['첫번째','둘째']);
         });
 
+        await check('Q09 Quiet copy stages new chat and verifies source/destination before metadata clone',async setup=>{
+            const page=await setup(3);
+            const raw='{"chat_metadata":{}}\n{"mes":"원문 복제","swipes":["하나","둘"]}\n';
+            const files=new Map([['chat-b',raw]]);
+            const calls=[];
+            await page.route('**/api/chats/export',async route=>{
+                const payload=route.request().postDataJSON();
+                const id=payload.file.slice(0,-6);
+                calls.push({action:'read',id});
+                if(!files.has(id)){
+                    await route.fulfill({status:404,contentType:'application/json',body:'{}'});
+                    return;
+                }
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:files.get(id)})});
+            });
+            await page.route('**/api/chats/save',async route=>{
+                const payload=route.request().postDataJSON();
+                calls.push({action:'save',id:payload.file_name});
+                files.set(payload.file_name,payload.chat.map(x=>JSON.stringify(x)).join('\n'));
+                await route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});
+            });
+            await page.route('**/api/chats/rename',async route=>{
+                const payload=route.request().postDataJSON();
+                const from=payload.original_file.slice(0,-6);
+                const to=payload.renamed_file.slice(0,-6);
+                calls.push({action:'rename',from,to});
+                if(!files.has(from)||files.has(to)){
+                    await route.fulfill({status:400,contentType:'application/json',body:'{}'});return;
+                }
+                files.set(to,files.get(from));files.delete(from);
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({ok:true,sanitizedFileName:to})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnContext.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const inactive=page.locator('.stmn-library-card').nth(1);
+            await inactive.locator('.stmn-quiet-item-menu summary').click();
+            await inactive.getByRole('button',{name:'채팅 파일 복제'}).click();
+            const panel=page.locator('.stmn-file-action');
+            await panel.waitFor({state:'visible'});
+            assert.match(await panel.locator('input').inputValue(),/복사본/);
+            assert.equal(calls.length,0);
+            await panel.getByRole('textbox',{name:'새 채팅 파일 이름'}).fill('새로운 복제');
+            await panel.getByRole('button',{name:'복제',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-file-action')?.hidden===true);
+            assert.equal(files.get('chat-b'),raw);
+            assert.equal(files.has('새로운 복제'),true);
+            assert.deepEqual(calls.filter(c=>c.action==='save').length,1);
+            const staged=calls.find(x=>x.action==='save')?.id;
+            assert.match(staged,/^stmn-copy-/);
+            assert.deepEqual(calls.filter(c=>c.action==='rename').map(x=>[x.from,x.to]),
+                [[staged,'새로운 복제']]);
+            assert.equal(files.has(staged),false);
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chatId),'chat-a');
+        });
+
         await check('Q07C single delete confirmation preserves archive on a 503 failure',async setup=>{
             const page=await setup(3);
             let deletes=0;

@@ -9,6 +9,8 @@ import {validateFilePlan,validateNewChatName,renameInactiveChat,deleteInactiveCh
 import {RecoveryVault} from './recovery-vault.js';
 import {archiveBeforeAction,confirmActionResult} from './recovery-operations.js';
 import {RecoveryBinUI} from './recovery-bin-ui.js';
+import {validateCopyPlan,suggestCopyName,copyChatFile} from './chat-copy.js';
+import {validateBackupSelection} from './file-backup.js';
 
 const element=(tag,cls='',value)=>{
     const node=document.createElement(tag);
@@ -76,14 +78,15 @@ export class FileActionUI {
     }
     openTrash(){return this.bin.open();}
     begin(kind,item){
-        if(this.busy || this.bin.busy || this.disposed || !this.isQuiet() || !['rename','delete'].includes(kind))
+        if(this.busy || this.bin.busy || this.disposed || !this.isQuiet() || !['rename','delete','copy'].includes(kind))
             return false;
         const owner=this.library.owner;
         const ctx=owner.callbacks.context(),scope=owner.scope;
         try {
             // Apply the shared inactive-chat/group guard even before a new
             // rename destination has been entered.
-            validateFilePlan(ctx,scope,owner.buildings,item.id,'delete');
+            if(kind==='copy')validateBackupSelection(ctx,scope,owner.buildings,[item.id]);
+            else validateFilePlan(ctx,scope,owner.buildings,item.id,'delete');
         }catch(error){
             owner.view.setStatus(error.message,true);return false;
         }
@@ -92,21 +95,24 @@ export class FileActionUI {
         this.pending={
             kind,id:item.id,name:item.name,scope,activeId:ctx.chatId,chat:ctx.chat,
         };
-        this.title.textContent=kind==='delete'?'채팅 삭제':'채팅 파일 이름 변경';
-        this.renameRow.hidden=kind!=='rename';
+        this.title.textContent=kind==='delete'?'채팅 삭제':
+            kind==='copy'?'채팅 파일 복제':'채팅 파일 이름 변경';
+        this.renameRow.hidden=kind==='delete';
+        this.newName.value=kind==='copy'?suggestCopyName(item.id):'';
         this.help.textContent=kind==='delete'
             ?'정말 "'+item.name+'" 채팅을 삭제할까요? 원본을 브라우저 복구 보관함에 자동 저장하고 검증한 뒤 삭제합니다. 기본 보관 기간은 30일입니다.'
-            :'새 파일 이름을 입력하세요. 변경 전에 복구용 원본을 자동 보관합니다.';
-        this.submit.textContent=kind==='delete'?'삭제':'이름 변경';
+            :kind==='copy'?'원본은 그대로 유지합니다. 별도의 새 채팅을 생성하고 원문·스와이프·제목을 검증합니다. 그룹과 관리 정보는 성공 후 연결됩니다.'
+                :'새 파일 이름을 입력하세요. 변경 전에 복구용 원본을 자동 보관합니다.';
+        this.submit.textContent=kind==='delete'?'삭제':kind==='copy'?'복제':'이름 변경';
         this.panel.hidden=false;
         this.updateButtons();
-        if(kind==='rename')this.newName.focus();
+        if(kind==='rename' || kind==='copy')this.newName.focus();
         else this.submit.focus();
         return true;
     }
     updateButtons(){
         this.submit.disabled=!this.pending || this.busy ||
-            (this.pending.kind==='rename' && !this.newName.value.trim());
+            (this.pending.kind!=='delete' && !this.newName.value.trim());
         this.cancel.disabled=this.busy;
         this.newName.disabled=this.busy;
     }
@@ -122,13 +128,38 @@ export class FileActionUI {
         }
         let newName=null;
         try {
-            if(pending.kind==='rename')newName=validateNewChatName(this.newName.value);
-            validateFilePlan(ctx,pending.scope,owner.buildings,pending.id,pending.kind,newName);
+            if(pending.kind==='rename' || pending.kind==='copy')
+                newName=validateNewChatName(this.newName.value);
+            if(pending.kind==='copy')validateCopyPlan(ctx,pending.scope,owner.buildings,pending.id,newName);
+            else validateFilePlan(ctx,pending.scope,owner.buildings,pending.id,pending.kind,newName);
         }catch(error){this.error.textContent=error.message;return false;}
         this.busy=true;this.cancelled=false;
         this.updateButtons();
-        this.help.textContent='원본을 안전하게 보관하고 확인하는 중입니다…';
+        this.help.textContent=pending.kind==='copy'
+            ?'복제 임시 파일을 만들고 원본과 내용을 확인하고 있습니다…'
+            :'원본을 안전하게 보관하고 확인하는 중입니다…';
         let archived=null;
+        if(pending.kind==='copy'){
+            try{
+                const result=await copyChatFile({
+                    context:owner.callbacks.context,scope:pending.scope,
+                    buildings:owner.buildings,id:pending.id,newName,
+                    libraryRepository:this.libraryRepository,
+                });
+                this.pending=null;this.panel.hidden=true;
+                owner.view.setStatus('채팅 복제 완료: '+result.newId+
+                    (result.warning?' · 주의: '+result.warning:''));
+                void owner.refreshBuildings(true);
+                return true;
+            }catch(error){
+                this.pending=null;this.panel.hidden=true;
+                owner.view.setStatus('채팅 복제를 확인할 수 없습니다: '+error.message,true);
+                void owner.refreshBuildings(true);
+                return false;
+            }finally{
+                this.busy=false;this.updateButtons();
+            }
+        }
         try{
             const currentLibrary=this.libraryRepository.read();
             archived=await archiveBeforeAction({

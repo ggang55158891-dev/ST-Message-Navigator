@@ -591,7 +591,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.18.0)');
+        console.info(PREFIX, 'loaded (v1.19.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
