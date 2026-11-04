@@ -245,6 +245,7 @@ class NavigatorApp {
             this.lastLanding = null;
             this.startLanding = null;
             this.view.editing = -1;
+            this.view.messageBatch?.reset();
             this.view.query = '';
             this.view.search.value = '';
             this.view.groupCollapsed.clear();
@@ -257,7 +258,12 @@ class NavigatorApp {
             'USER_MESSAGE_RENDERED', 'CHARACTER_MESSAGE_RENDERED',
             'MESSAGE_EDITED', 'MESSAGE_UPDATED', 'MESSAGE_DELETED',
             'MESSAGE_SWIPED', 'MORE_MESSAGES_LOADED',
-        ]) register(key, () => this.scheduleRefresh(false));
+        ]) register(key, () => {
+            if (['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED'].includes(key)) {
+                if (this.view.messageBatch?.selectionMode)this.view.messageBatch.reset();
+            }
+            this.scheduleRefresh(false);
+        });
         // Scope this observer to the chat only. It never changes ST's nodes.
         if (this.chatElement && typeof MutationObserver !== 'undefined') {
             this.observer = new MutationObserver(records => {
@@ -591,7 +597,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.20.0)');
+        console.info(PREFIX, 'loaded (v1.21.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }

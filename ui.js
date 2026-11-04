@@ -1,5 +1,6 @@
 import { DATA_KEY, MESSAGE_KEY, automaticTitle, getTitle, isCustomTitle } from './model.js';
 import { ElevatorPanel } from './elevator-ui.js';
+import { MessageBatchUI } from './message-batch-ui.js';
 import { withQuietPreview, previewSwipes, messageTooltipText, QUIET_DETAIL_HEIGHT } from './quiet-preview.js';
 import { installExtensionUpdateUI } from './update-ui.js';
 import { installDiagnosticsSettings } from './diagnostics-ui.js';
@@ -198,6 +199,7 @@ export class NavigatorView {
         this.panelResize.title = '드래그하여 패널 크기 변경';
         this.panel.append(header, this.caption, searchbox, this.groupTools, this.list, this.outlineJumps, this.footer, this.panelResize);
         this.elevator = new ElevatorPanel(this, callbacks);
+        this.messageBatch = new MessageBatchUI(this);
         this.root.append(this.nav, this.panel);
         document.body.append(this.root);
         this.onKeydown = event => {
@@ -541,6 +543,11 @@ export class NavigatorView {
             if (entry.message?.is_system === true) row.classList.add('stmn-hidden-message');
             if (this.currentIndex === entry.index) row.classList.add('stmn-current');
             const number = el('span', 'stmn-number', '#' + entry.index);
+            if (this.messageBatch?.selectionMode && this.root.dataset.elevatorTheme === 'quiet' &&
+                this.elevator.tab === 'floors') {
+                row.append(this.messageBatch.checkboxFor(entry.index,entry.message));
+                row.classList.toggle('stmn-message-batch-selected',this.messageBatch.selected.has(entry.index));
+            }
             row.append(number, avatarElement(context, entry.message));
             const middle = el('div', 'stmn-row-body');
             if (this.editing === entry.index) {
@@ -825,6 +832,7 @@ export class NavigatorView {
         window.removeEventListener('pointermove', this.onNavPointerMove);
         window.removeEventListener('pointerup', this.onNavPointerEnd);
         window.removeEventListener('pointercancel', this.onNavPointerEnd);
+        this.messageBatch?.destroy();
         this.elevator?.destroy();
         this.root.remove();
     }

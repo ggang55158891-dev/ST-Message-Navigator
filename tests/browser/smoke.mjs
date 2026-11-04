@@ -531,6 +531,132 @@ async function run() {
             assert.deepEqual(JSON.parse(files.get(restoredName).split('\n')[1]).swipes,['첫번째','둘째']);
         });
 
+        await check('Q10 Quiet multi-message bookmarks and numbered titles with one ST save each',async setup=>{
+            const page=await setup(8);
+            await page.evaluate(()=>{
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+                window.__stmnSaveCount=0;
+                window.__stmnContext.saveMetadata=async()=>{window.__stmnSaveCount++;};
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'메시지 다중 선택',exact:true}).click();
+            await page.getByRole('checkbox',{name:'#0 메시지 선택'}).check();
+            await page.getByRole('checkbox',{name:'#2 메시지 선택'}).check();
+            await page.getByRole('checkbox',{name:'#4 메시지 선택'}).check();
+            assert.match(await page.locator('.stmn-message-batch-summary').textContent(),/3\/20/);
+            await page.getByRole('button',{name:'변경 적용'}).click();
+            await page.waitForFunction(()=>window.__stmnSaveCount===1);
+            const state=await page.evaluate(async()=>{
+                const {DATA_KEY,MESSAGE_KEY}=await import('/model.js');
+                const ctx=window.__stmnContext;
+                return {
+                    count:ctx.chat.length,
+                    bookmarks:ctx.chat.map(m=>ctx.chatMetadata[DATA_KEY]?.bookmarks?.[m[MESSAGE_KEY]]===true),
+                    saveCount:window.__stmnSaveCount,
+                };
+            });
+            assert.equal(state.count,8);
+            assert.deepEqual(state.bookmarks,[true,false,true,false,true,false,false,false]);
+            assert.equal(state.saveCount,1);
+            await page.getByRole('button',{name:'메시지 다중 선택',exact:true}).click();
+            await page.getByRole('checkbox',{name:'#2 메시지 선택'}).check();
+            await page.getByRole('checkbox',{name:'#4 메시지 선택'}).check();
+            await page.getByRole('combobox',{name:'메시지 다중 편집 작업'}).selectOption('title');
+            await page.getByRole('textbox',{name:'일괄 변경할 공통 메시지 제목'}).fill('첫 만남');
+            await page.getByRole('button',{name:'변경 적용'}).click();
+            await page.waitForFunction(()=>window.__stmnSaveCount===2);
+            const titles=await page.evaluate(async()=>{
+                const {DATA_KEY,MESSAGE_KEY}=await import('/model.js');
+                const ctx=window.__stmnContext;
+                return [2,4].map(i=>ctx.chatMetadata[DATA_KEY].titles[ctx.chat[i][MESSAGE_KEY]]);
+            });
+            assert.deepEqual(titles,['첫 만남 1','첫 만남 2']);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(m=>m.mes)),
+                Array.from({length:8},(_,i)=>'메시지 '+i+' · 흥미로운 이야기 '+
+                    (i===14?'비밀 #4는 여기에 있어요.':'이야기의 다음 장면입니다.')));
+        });
+
+        await check('Q10 hidden messages reflect native is_system flag and unhide safely',async setup=>{
+            const page=await setup(6);
+            await page.evaluate(()=>{
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+                window.__stmnContext.saveMetadata=async()=>{};
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'메시지 다중 선택',exact:true}).click();
+            await page.getByRole('checkbox',{name:'#1 메시지 선택'}).check();
+            await page.getByRole('checkbox',{name:'#3 메시지 선택'}).check();
+            await page.getByRole('combobox',{name:'메시지 다중 편집 작업'}).selectOption('hide');
+            await page.getByRole('button',{name:'변경 적용'}).click();
+            await page.waitForFunction(()=>window.__stmnContext.chat[1].is_system===true);
+            assert.equal(await page.locator('.stmn-row.stmn-hidden-message').count(),2);
+            await page.getByRole('button',{name:'메시지 다중 선택',exact:true}).click();
+            await page.getByRole('checkbox',{name:'#1 메시지 선택'}).check();
+            await page.getByRole('checkbox',{name:'#3 메시지 선택'}).check();
+            await page.getByRole('combobox',{name:'메시지 다중 편집 작업'}).selectOption('show');
+            await page.getByRole('button',{name:'변경 적용'}).click();
+            await page.waitForFunction(()=>window.__stmnContext.chat[1].is_system===false);
+            assert.equal(await page.locator('.stmn-row.stmn-hidden-message').count(),0);
+        });
+
+        await check('Q10 deletion is gated by verified ZIP download and native descending deletes',async setup=>{
+            const page=await setup(8);
+            const reads=[];
+            await page.route('**/api/chats/export',async route=>{
+                const payload=route.request().postDataJSON();
+                reads.push(payload.file);
+                const raw=await page.evaluate(()=>{
+                    const ctx=window.__stmnContext;
+                    return [JSON.stringify({chat_metadata:ctx.chatMetadata}),
+                        ...ctx.chat.map(m=>JSON.stringify(m))].join('\n')+'\n';
+                });
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:raw})});
+            });
+            await page.evaluate(()=>{
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+                window.__stmnDeleted=[];
+                const ctx=window.__stmnContext;
+                ctx.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                ctx.saveChat=async()=>{};
+                ctx.deleteMessage=async(index,_swipe,_confirm,tools)=>{
+                    if(tools!==false)throw Error('unexpected deletion of neighboring tool calls');
+                    window.__stmnDeleted.push(index);
+                    ctx.chat.splice(index,1);
+                    document.querySelector('#chat > .mes[mesid="'+index+'"]')?.remove();
+                    document.querySelectorAll('#chat > .mes[mesid]').forEach(node=>{
+                        const n=Number(node.getAttribute('mesid'));
+                        if(n>index)node.setAttribute('mesid',String(n-1));
+                    });
+                };
+                const host=document.getElementById('chat');
+                host.replaceChildren();
+                for(let i=0;i<ctx.chat.length;i++){
+                    const row=document.createElement('div');
+                    row.className='mes';row.setAttribute('mesid',String(i));
+                    host.append(row);
+                }
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'메시지 다중 선택',exact:true}).click();
+            await page.getByRole('checkbox',{name:'#2 메시지 선택'}).check();
+            await page.getByRole('checkbox',{name:'#5 메시지 선택'}).check();
+            await page.getByRole('combobox',{name:'메시지 다중 편집 작업'}).selectOption('delete');
+            const submit=page.getByRole('button',{name:'③ 선택 메시지 영구 삭제'});
+            assert.equal(await submit.isDisabled(),true);
+            assert.deepEqual(reads,[]);
+            await page.getByRole('button',{name:'① 원본 ZIP 다운로드'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-message-batch-confirm input')?.disabled===false);
+            assert.equal(await submit.isDisabled(),true);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnDeleted),[]);
+            await page.getByRole('checkbox',{name:/백업 파일을 보관했고/}).check();
+            await submit.click();
+            await page.waitForFunction(()=>window.__stmnDeleted.length===2);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnDeleted),[5,2]);
+            assert.equal(await page.evaluate(()=>window.__stmnContext.chat.length),6);
+            assert.equal(reads.length,3,'prepare, preflight and post-delete verification');
+        });
+
         await check('Q09 Quiet copy stages new chat and verifies source/destination before metadata clone',async setup=>{
             const page=await setup(3);
             const raw='{"chat_metadata":{}}\n{"mes":"원문 복제","swipes":["하나","둘"]}\n';
