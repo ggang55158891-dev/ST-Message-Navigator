@@ -715,6 +715,147 @@ async function run() {
             assert.equal(await page.evaluate(()=>window.__stmnDeleted),0);
         });
 
+        await check('D05B portable ZIP exports covers and Library, restores in cleared browser storage without JSONL writes',async setup=>{
+            const page=await setup(2,undefined,true);
+            const writes=[];
+            page.on('request',request=>{
+                if(['/api/chats/save','/api/chats/delete','/api/chats/rename',
+                     '/api/chats/group/save'].some(path=>request.url().includes(path)))
+                    writes.push(request.url());
+            });
+            await page.evaluate(async()=>{
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
+                const {LIBRARY_KEY,emptyLibrary,emptyRecord,chatReference}=await import('/library-data.js');
+                const canvas=document.createElement('canvas');
+                canvas.width=20;canvas.height=22;
+                canvas.getContext('2d').fillRect(0,0,20,22);
+                const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+                const store=new ChatCoverStore();
+                const ref=await store.put(png);
+                const library=emptyLibrary();
+                library.records[chatReference('character:none','chat-a')]={
+                    ...emptyRecord(),alias:'복원할 제목',imageRef:ref,favorite:true,
+                };
+                window.__coverInitialRef=ref;
+                window.__themeAppContext.extensionSettings[LIBRARY_KEY]=library;
+                store.destroy();
+            });
+            await page.locator('#stmn-settings > details > summary').click();
+            await page.locator('.stmn-cover-settings > summary').click();
+            const downloadPromise=page.waitForEvent('download');
+            await page.getByRole('button',{name:'전체 표지·관리 정보 ZIP 다운로드'}).click();
+            const download=await downloadPromise;
+            assert.match(download.suggestedFilename(),/stmn-covers-.*\.zip/);
+            const raw=await readFile(await download.path());
+            assert.ok(raw.byteLength>200);
+            const remaining=await page.evaluate(async()=>{
+                const {ChatCoverStore,COVER_DB}=await import('/chat-cover-store.js');
+                const {LIBRARY_KEY,emptyLibrary}=await import('/library-data.js');
+                const store=new ChatCoverStore();
+                const old=await store.listRefs();
+                store.destroy();
+                await new Promise((resolve,reject)=>{
+                    const request=indexedDB.deleteDatabase(COVER_DB);
+                    request.onsuccess=()=>resolve();
+                    request.onerror=()=>reject(request.error);
+                    request.onblocked=()=>reject(Error('indexedDB blocked'));
+                });
+                window.__themeAppContext.extensionSettings[LIBRARY_KEY]=emptyLibrary();
+                return old.length;
+            });
+            assert.equal(remaining,1);
+            const picker=page.locator('.stmn-cover-settings input[type="file"]');
+            await picker.setInputFiles({name:'transfer.zip',mimeType:'application/zip',buffer:raw});
+            await page.waitForFunction(()=>document.querySelector('.stmn-cover-restore')?.hidden===false);
+            assert.match(await page.locator('.stmn-cover-report').textContent(),/포함된 이미지: 1개/);
+            await page.locator('.stmn-cover-restore input[type="checkbox"]').first().check();
+            await page.locator('.stmn-cover-restore input[type="checkbox"]').nth(1).check();
+            await page.getByRole('button',{name:'검증된 표지 ZIP 복원'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-cover-feedback')?.textContent.includes('복원 및 이미지 재조회 검증 완료'));
+            const result=await page.evaluate(async()=>{
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
+                const {LIBRARY_KEY,chatReference}=await import('/library-data.js');
+                const library=window.__themeAppContext.extensionSettings[LIBRARY_KEY];
+                const ref=library.records[chatReference('character:none','chat-a')]?.imageRef;
+                const store=new ChatCoverStore();
+                const loaded=await store.get(ref);
+                store.destroy();
+                return {ref,alias:library.records[chatReference('character:none','chat-a')]?.alias,
+                    bytes:loaded?.size,count:(await new ChatCoverStore().listRefs()).length};
+            });
+            assert.equal(result.ref,await page.evaluate(()=>window.__coverInitialRef));
+            assert.equal(result.alias,'복원할 제목');
+            assert.ok(result.bytes>12);
+            assert.equal(result.count,1);
+            assert.deepEqual(writes,[]);
+        });
+
+        await check('D05B cleanup is gated by same-session verified full ZIP and only prunes orphaned images',async setup=>{
+            const page=await setup(2,undefined,true);
+            await page.evaluate(async()=>{
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
+                const {LIBRARY_KEY,emptyLibrary,emptyRecord,chatReference}=await import('/library-data.js');
+                const store=new ChatCoverStore();
+                const draw=async(color)=>{
+                    const canvas=document.createElement('canvas');
+                    canvas.width=16;canvas.height=16;
+                    canvas.getContext('2d').fillStyle=color;
+                    canvas.getContext('2d').fillRect(0,0,16,16);
+                    return new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+                };
+                const a=await store.put(await draw('#ff00ff'));
+                const b=await store.put(await draw('#00ffff'));
+                window.__d05bRefs=[a,b];
+                const library=emptyLibrary();
+                library.records[chatReference('character:none','chat-a')]={
+                    ...emptyRecord(),imageRef:a,
+                };
+                window.__themeAppContext.extensionSettings[LIBRARY_KEY]=library;
+                store.destroy();
+            });
+            await page.locator('#stmn-settings > details > summary').click();
+            await page.locator('.stmn-cover-settings > summary').click();
+            await page.getByRole('button',{name:'미사용 표지 상태 점검'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-cover-cleanup')?.hidden===false);
+            assert.match(await page.locator('.stmn-cover-cleanup-preview').textContent(),/미사용 1개/);
+            assert.equal(await page.getByRole('button',{name:'미사용 이미지 정리 실행'}).isDisabled(),true);
+            const dl=page.waitForEvent('download');
+            await page.getByRole('button',{name:'전체 표지·관리 정보 ZIP 다운로드'}).click();
+            await dl;
+            // A download invalidates an earlier cleanup plan: recheck current DB.
+            await page.getByRole('button',{name:'미사용 표지 상태 점검'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-cover-cleanup')?.hidden===false);
+            await page.locator('.stmn-cover-cleanup input[type="checkbox"]').check();
+            assert.equal(await page.getByRole('button',{name:'미사용 이미지 정리 실행'}).isEnabled(),true);
+            await page.getByRole('button',{name:'미사용 이미지 정리 실행'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-cover-feedback')?.textContent.includes('미사용 표지 1개'));
+            const result=await page.evaluate(async()=>{
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
+                const store=new ChatCoverStore();
+                const [a,b]=window.__d05bRefs;
+                return {a:Boolean(await store.get(a)),b:Boolean(await store.get(b)),
+                    total:(await store.listRefs()).length};
+            });
+            assert.deepEqual(result,{a:true,b:false,total:1});
+        });
+
+        await check('D05B rejects mutated ZIP before any IndexedDB write',async setup=>{
+            const page=await setup(2,undefined,true);
+            await page.locator('#stmn-settings > details > summary').click();
+            await page.locator('.stmn-cover-settings > summary').click();
+            const invalid=new Uint8Array([80,75,3,4,1,2,3,4,5,6,7,8,9,10,11,12]);
+            await page.locator('.stmn-cover-settings input[type="file"]').setInputFiles({
+                name:'corrupt.zip',mimeType:'application/zip',buffer:Buffer.from(invalid),
+            });
+            await page.waitForFunction(()=>document.querySelector('.stmn-cover-feedback')?.textContent.includes('ZIP 복원 검증 실패'));
+            assert.equal(await page.locator('.stmn-cover-restore').isVisible(),false);
+            const keys=await page.evaluate(async()=>{
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
+                return (await new ChatCoverStore().listRefs()).length;
+            });
+            assert.equal(keys,0);
+        });
+
         await check('D05A Quiet per-chat cover saves locally, displays, exports and unlinks without JSONL writes',async setup=>{
             const page=await setup(4);
             const writes=[];

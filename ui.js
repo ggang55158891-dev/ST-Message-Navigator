@@ -9,6 +9,7 @@ import { installExtensionUpdateUI } from './update-ui.js';
 import { installDiagnosticsSettings } from './diagnostics-ui.js';
 import { installSettingsBackupUI } from './settings-backup-ui.js';
 import { installLibraryBackupUI } from './library-backup-ui.js';
+import { installCoverArchiveUI } from './cover-archive-ui.js';
 import { constrainNavPosition, fromRelativeNavPosition, toRelativeNavPosition } from './position.js';
 import { PANEL_MIN_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_WIDTH, PANEL_MAX_HEIGHT, fitPanelSize } from './panel-size.js';
 import { GROUP_SIZE, MESSAGE_ROW_HEIGHT, buildOutlineRows, filterOutlineEntries, findOutlineRow } from './outline.js';
@@ -933,6 +934,7 @@ export function installSettings(context, settings, onChange, diagnostics, backup
     installDiagnosticsSettings(inner, settings, onChange, diagnostics);
     installSettingsBackupUI(inner, backupCallbacks || {});
     installLibraryBackupUI(inner, libraryCallbacks || {});
+    installCoverArchiveUI(inner, libraryCallbacks || {});
     heading.append(inner);
     container.append(heading);
     host.append(container);

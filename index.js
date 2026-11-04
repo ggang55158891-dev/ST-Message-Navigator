@@ -113,6 +113,12 @@ class NavigatorApp {
             {
                 readLibrary: () => this.library.read(),
                 importLibrary: incoming => this.library.importAdditively(incoming),
+                onCoverRestored: async()=>{
+                    const owner=this.view.elevator;
+                    if(this.view.panelOpen && owner?.tab==='buildings'){
+                        await owner.refreshBuildings(true);
+                    }
+                },
             },
         );
         this.bindChatScroll();
@@ -604,7 +610,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.24.0)');
+        console.info(PREFIX, 'loaded (v1.25.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }

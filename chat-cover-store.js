@@ -188,6 +188,101 @@ export class ChatCoverStore{
         return {blob,filename:'stmn-cover-'+ref.slice(COVER_REF_PREFIX.length,28)+
             (blob.type==='image/png'?'.png':'.webp')};
     }
+    /** List only, never deletes or loads image bodies. */
+    async listRefs(){
+        const db=await this.open();
+        try{
+            const keys=await request(db.transaction('covers','readonly')
+                .objectStore('covers').getAllKeys());
+            if(keys.length>COVER_MAX_ASSETS ||
+               keys.some(key=>!isLocalCoverRef(key)) ||
+               new Set(keys).size!==keys.length)
+                throw new Error('로컬 표지 보관함에 알 수 없는 키가 있습니다. 백업 후 확인해 주세요.');
+            return keys.sort();
+        }finally{db.close();}
+    }
+    /**
+     * All-or-none IndexedDB installation for an already validated archive.
+     * Never overwrites an existing digest; a digest clash is checked against
+     * the existing original before attempting the add-only transaction.
+     */
+    async installVerified(assets){
+        if(!Array.isArray(assets) || assets.length>COVER_MAX_ASSETS)
+            throw new Error('표지 아카이브 이미지 수가 허용 범위를 초과했습니다.');
+        const prepared=new Map();
+        for(const asset of assets){
+            if(!isLocalCoverRef(asset?.ref) || !(asset.blob instanceof Blob) ||
+               prepared.has(asset.ref) || await coverRefFor(asset.blob)!==asset.ref)
+                throw new Error('표지 내용·해시·중복 식별자가 유효하지 않습니다.');
+            prepared.set(asset.ref,asset.blob);
+        }
+        // A read validates preexisting bytes. Failed/corrupt records are not
+        // replaced, even if the incoming digest looks correct.
+        for(const key of prepared.keys())await this.get(key);
+        const db=await this.open();
+        let added=0;
+        try{
+            const tx=db.transaction('covers','readwrite'),done=complete(tx);
+            try{
+                const store=tx.objectStore('covers');
+                const keys=await request(store.getAllKeys());
+                if(keys.some(k=>!isLocalCoverRef(k)) ||
+                   keys.length>COVER_MAX_ASSETS)throw new Error('표지 보관함 상태가 올바르지 않습니다.');
+                const existing=new Set(keys);
+                const remaining=[...prepared].filter(([key])=>!existing.has(key));
+                if(existing.size+remaining.length>COVER_MAX_ASSETS)
+                    throw new Error('표지를 복원하면 이미지 120개 제한을 초과합니다. 먼저 백업을 점검하세요.');
+                for(const [ref,blob] of remaining){
+                    store.add({blob,bytes:blob.size,mime:blob.type,createdAt:Date.now()},ref);
+                }
+                added=remaining.length;
+                await done;
+            }catch(error){
+                try{tx.abort();}catch{}
+                await done.catch(()=>{});
+                throw error;
+            }
+        }finally{db.close();}
+        for(const ref of prepared.keys())
+            if(!await this.get(ref))
+                throw new Error('표지 복원 후 검증에 실패했습니다. 파일을 다시 확인하세요.');
+        return {added,existing:prepared.size-added};
+    }
+    /** Precondition: caller has rechecked current Library references. */
+    async deleteUnreferenced(refs,expectedAllRefs){
+        if(!Array.isArray(refs) || !Array.isArray(expectedAllRefs) ||
+           new Set(refs).size!==refs.length ||
+           refs.some(x=>!isLocalCoverRef(x)) ||
+           expectedAllRefs.some(x=>!isLocalCoverRef(x)))
+            throw new Error('삭제 목록이 올바르지 않습니다.');
+        const db=await this.open();
+        let deleted=0;
+        try{
+            const tx=db.transaction('covers','readwrite'),done=complete(tx);
+            try{
+                const store=tx.objectStore('covers');
+                const actual=(await request(store.getAllKeys())).sort();
+                if(JSON.stringify(actual)!==JSON.stringify([...expectedAllRefs].sort()))
+                    throw new Error('백업 이후 표지 보관함 목록이 변경됐습니다. 다시 점검하세요.');
+                const live=new Set(actual);
+                for(const ref of refs){
+                    if(!live.has(ref))throw new Error('삭제 대상 표지가 사라졌습니다.');
+                    store.delete(ref);
+                }
+                deleted=refs.length;
+                await done;
+            }catch(error){
+                try{tx.abort();}catch{}
+                await done.catch(()=>{});
+                throw error;
+            }
+        }finally{db.close();}
+        for(const ref of refs){
+            const url=this.urls.get(ref);
+            if(url){URL.revokeObjectURL(url);this.urls.delete(ref);}
+        }
+        return {deleted};
+    }
     destroy(){
         for(const url of this.urls.values())URL.revokeObjectURL(url);
         this.urls.clear();
