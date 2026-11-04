@@ -147,8 +147,10 @@ export class ElevatorPanel {
         if (this.tab === 'buildings'){
             this.view.reorderUI?.reset();
             this.view.messageBatch?.reset();
-        }else this.view.reorderUI?.update();
-        else this.view.messageBatch?.update();
+        }else{
+            this.view.reorderUI?.update();
+            this.view.messageBatch?.update();
+        }
         const buildings = this.tab === 'buildings';
         if (!buildings) {
             this.libraryUI.searchUI.invalidate();
