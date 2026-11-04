@@ -1729,3 +1729,94 @@
 #stmn-root[data-elevator-theme="quiet"] .stmn-chat-search-server:focus-visible {
     outline:2px solid #728977;outline-offset:2px;
 }
+
+
+/* Q-10: Quiet-only multi-message selection. Independent of outline virtual rows. */
+#stmn-root .stmn-message-batch[hidden],
+#stmn-root .stmn-message-batch-controls[hidden],
+#stmn-root .stmn-message-batch-backup[hidden],
+#stmn-root .stmn-message-batch-title[hidden] {display:none!important}
+#stmn-root .stmn-message-batch {display:none}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch:not([hidden]){
+    flex:none;min-width:0;display:flex;flex-direction:column;gap:8px;
+    padding:4px 13px 9px;
+    border-bottom:1px solid #e7e9e5;color:#39413b;
+    font-family:inherit;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-open{
+    align-self:flex-start;border:1px solid #e0e6df;border-radius:9px;
+    background:#f5f7f4;color:#526054;padding:6px 11px;
+    font:inherit;font-size:11px;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-open[aria-pressed="true"]{
+    background:#414e42;color:#fff;border-color:#414e42;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-controls:not([hidden]){
+    display:flex;flex-direction:column;gap:8px;
+    border:1px solid #e4e9e2;border-radius:12px;
+    background:#fafbf9;padding:10px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-summary{
+    color:#647169;font-size:11px;line-height:1.65;
+    max-height:48px;overflow:auto;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-actions{
+    display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-label,
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-title{
+    display:flex;align-items:center;gap:6px;flex:1 1 170px;
+    font-size:11px;color:#66756a;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-operation,
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-title input{
+    min-width:0;flex:1;max-width:100%;
+    background:#fff;color:#3b4d40;
+    border:1px solid #dfe6df;border-radius:8px;
+    font:inherit;font-size:11px;padding:7px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-actions > button,
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-download{
+    padding:7px 11px;font:inherit;font-size:11px;cursor:pointer;
+    border-radius:8px;border:1px solid #dde4dc;
+    background:#fff;color:#48574b;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-apply:not(:disabled){
+    background:#384f40;color:#fff;border-color:#384f40;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch :is(button,input,select):focus-visible{
+    outline:2px solid #72957a;outline-offset:2px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch :is(button,input,select):disabled{
+    opacity:.5;cursor:default;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-backup:not([hidden]){
+    display:flex;flex-direction:column;align-items:flex-start;gap:8px;
+    border-top:1px solid #ede4df;padding-top:9px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-backup p{
+    margin:0;color:#926956;line-height:1.65;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-confirm{
+    display:flex;align-items:flex-start;gap:7px;
+    font-size:11px;color:#765a4c;line-height:1.6;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-confirm input{flex:none;margin-top:3px}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-warning{
+    margin:0;color:#865d45;font-size:11px;line-height:1.65;
+    overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-warning:empty{display:none}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-check{
+    flex:none;width:16px;height:16px;margin:0 2px;
+    accent-color:#637e69;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-selected{
+    background:#edf3ed!important;
+}
+@media(max-width:480px){
+    #stmn-root[data-elevator-theme="quiet"] .stmn-message-batch:not([hidden]){
+        padding:3px 8px 7px;
+    }
+    #stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-controls:not([hidden]){padding:7px}
+}
