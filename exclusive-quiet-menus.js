@@ -30,7 +30,7 @@ export class ExclusiveQuietMenus{
         };
         this.keydown=event=>{
             if(event.key!=='Escape')return;
-            const active=this.root.querySelector(QUIET_ITEM_MENU_SELECTOR+'[open]');
+            const active=[...this.root.querySelectorAll(QUIET_ITEM_MENU_SELECTOR)].find(menu=>menu.open);
             if(!active)return;
             this.closeExcept(null);
             event.preventDefault();
