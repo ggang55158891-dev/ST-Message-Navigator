@@ -2,6 +2,8 @@ import { DATA_KEY, MESSAGE_KEY, automaticTitle, getTitle, isCustomTitle } from '
 import { ElevatorPanel } from './elevator-ui.js';
 import { MessageBatchUI } from './message-batch-ui.js';
 import { MessageReorderUI } from './message-reorder-ui.js';
+import { SingleMessageActions } from './single-message-actions.js';
+import { ExclusiveQuietMenus } from './exclusive-quiet-menus.js';
 import { withQuietPreview, previewSwipes, messageTooltipText, QUIET_DETAIL_HEIGHT } from './quiet-preview.js';
 import { installExtensionUpdateUI } from './update-ui.js';
 import { installDiagnosticsSettings } from './diagnostics-ui.js';
@@ -202,7 +204,9 @@ export class NavigatorView {
         this.elevator = new ElevatorPanel(this, callbacks);
         this.messageBatch = new MessageBatchUI(this);
         this.reorderUI = new MessageReorderUI(this);
+        this.singleActions = new SingleMessageActions(this);
         this.root.append(this.nav, this.panel);
+        this.exclusiveMenus = new ExclusiveQuietMenus(this.root);
         document.body.append(this.root);
         this.onKeydown = event => {
             if (event.key === 'Escape' && this.panelOpen && this.editing < 0) this.toggle(false);
@@ -630,7 +634,20 @@ export class NavigatorView {
                 const info = el('button','stmn-quiet-menu-item','내용 미리보기');
                 info.type = 'button';
                 info.addEventListener('click', () => { menu.open = false; this.showQuietMessagePreview(entry); });
-                actions.append(jump, rename, info);
+                const hidden=el('button','stmn-quiet-menu-item',
+                    entry.message?.is_system===true?'메시지 숨김 해제':'메시지 숨기기');
+                hidden.type='button';
+                hidden.addEventListener('click',()=>{
+                    menu.open=false;
+                    void this.singleActions.toggleHidden(entry.index,entry.message);
+                });
+                const remove=el('button','stmn-quiet-menu-item stmn-quiet-menu-danger','메시지 삭제');
+                remove.type='button';
+                remove.addEventListener('click',()=>{
+                    menu.open=false;
+                    this.singleActions.openDelete(entry.index,entry.message);
+                });
+                actions.append(jump,rename,info,hidden,remove);
                 menu.append(summary,actions);
                 row.append(menu);
             }
@@ -834,6 +851,8 @@ export class NavigatorView {
         window.removeEventListener('pointermove', this.onNavPointerMove);
         window.removeEventListener('pointerup', this.onNavPointerEnd);
         window.removeEventListener('pointercancel', this.onNavPointerEnd);
+        this.exclusiveMenus?.destroy();
+        this.singleActions?.destroy();
         this.reorderUI?.destroy();
         this.messageBatch?.destroy();
         this.elevator?.destroy();
