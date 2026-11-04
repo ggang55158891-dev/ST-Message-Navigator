@@ -116,6 +116,10 @@ export class ElevatorPanel {
             else this.view.reorderUI.update();
         }
         this.quiet?.refresh();
+        if (this.view.root.dataset.elevatorTheme !== 'quiet'){
+            this.view.singleActions?.close();
+            this.view.exclusiveMenus?.closeExcept(null);
+        }
         if (this.view.messageBatch) {
             if (this.view.root.dataset.elevatorTheme !== 'quiet')this.view.messageBatch.reset();
             else this.view.messageBatch.update();
@@ -143,6 +147,8 @@ export class ElevatorPanel {
     }
 
     setTab(tab) {
+        this.view.singleActions?.close();
+        this.view.exclusiveMenus?.closeExcept(null);
         this.tab = tab === 'buildings' ? 'buildings' : 'floors';
         if (this.tab === 'buildings'){
             this.view.reorderUI?.reset();

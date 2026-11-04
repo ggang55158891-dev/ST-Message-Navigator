@@ -532,6 +532,189 @@ async function run() {
         });
 
 
+        await check('Q12 Quiet message menus are exclusive, dismissible, and remain opaque on hidden rows',async setup=>{
+            const page=await setup(7);
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.chat[4].is_system=true;
+                window.__stmnSaveMetadata=0;
+                ctx.saveMetadata=async()=>{window.__stmnSaveMetadata++;};
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            const first=page.locator('.stmn-row[data-index="3"] .stmn-quiet-message-menu');
+            const second=page.locator('.stmn-row[data-index="4"] .stmn-quiet-message-menu');
+            await first.locator('summary').click();
+            assert.equal(await first.evaluate(node=>node.open),true);
+            await second.locator('summary').click();
+            assert.equal(await first.evaluate(node=>node.open),false);
+            assert.equal(await second.evaluate(node=>node.open),true);
+            assert.equal(await page.locator('.stmn-quiet-message-menu[open]').count(),1);
+            const render=await second.evaluate(menu=>{
+                const row=menu.closest('.stmn-row');
+                const content=row.querySelector('.stmn-row-body');
+                const body=menu.querySelector('.stmn-quiet-message-menu-body');
+                const action=body.querySelector('button');
+                const r=action.getBoundingClientRect();
+                const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+                return {row:getComputedStyle(row).opacity,
+                    content:getComputedStyle(content).opacity,
+                    menu:getComputedStyle(menu).opacity,
+                    body:getComputedStyle(body).opacity,
+                    clickable:action===hit || action.contains(hit)};
+            });
+            assert.equal(render.row,'1');
+            assert.equal(render.content,'0.57');
+            assert.equal(render.menu,'1');
+            assert.equal(render.body,'1');
+            assert.equal(render.clickable,true,'underlying sibling rows must not intercept menu clicks');
+            await second.getByRole('button',{name:'메시지 숨김 해제'}).click();
+            await page.waitForFunction(()=>window.__stmnContext.chat[4].is_system===false);
+            assert.equal(await page.evaluate(()=>window.__stmnSaveMetadata),1);
+            assert.equal(await page.locator('.stmn-row[data-index="4"].stmn-hidden-message').count(),0);
+            await page.locator('.stmn-row[data-index="3"] .stmn-quiet-message-menu summary').click();
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator('.stmn-quiet-message-menu[open]').count(),0);
+            assert.equal(await page.locator('.stmn-outline').isVisible(),true,
+                'Escape closes the menu, not the whole outline');
+            await page.locator('.stmn-row[data-index="3"] .stmn-quiet-message-menu summary').click();
+            await page.getByRole('button',{name:'메시지 다중 선택',exact:true}).click();
+            assert.equal(await page.locator('.stmn-quiet-message-menu[open]').count(),0);
+        });
+
+        await check('Q12 Quiet chat management menus never overlap when choosing another chat',async setup=>{
+            const page=await setup(3);
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('quiet','auto'));
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            const cards=page.locator('.stmn-library-card');
+            await cards.first().waitFor();
+            const menuA=cards.nth(0).locator('.stmn-quiet-item-menu');
+            const menuB=cards.nth(1).locator('.stmn-quiet-item-menu');
+            await menuA.locator('summary').click();
+            assert.equal(await menuA.evaluate(x=>x.open),true);
+            await menuB.locator('summary').click();
+            assert.equal(await menuA.evaluate(x=>x.open),false);
+            assert.equal(await menuB.evaluate(x=>x.open),true);
+            assert.equal(await page.locator('.stmn-quiet-item-menu[open]').count(),1);
+            await menuB.locator('summary').click();
+            assert.equal(await page.locator('.stmn-quiet-item-menu[open]').count(),0);
+            // User-facing clicks have synchronous exclusivity. Programmatic
+            // same-tick toggles are deliberately not treated as user intent.
+            await menuA.locator('summary').click();
+            assert.equal(await menuB.evaluate(x=>x.open),false);
+            assert.equal(await page.locator('.stmn-quiet-item-menu[open]').count(),1);
+        });
+
+        await check('Q12 single hidden-message menu offers hide and hide-release without changing neighbors',async setup=>{
+            const page=await setup(5);
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.chat[2].is_system=true;
+                ctx.saveMetadata=async()=>{};
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            const menu=page.locator('.stmn-row[data-index="2"] .stmn-quiet-message-menu');
+            await menu.locator('summary').click();
+            await menu.getByRole('button',{name:'메시지 숨김 해제'}).click();
+            await page.waitForFunction(()=>window.__stmnContext.chat[2].is_system===false);
+            await page.locator('.stmn-row[data-index="2"] .stmn-quiet-message-menu summary').click();
+            await page.locator('.stmn-row[data-index="2"] .stmn-quiet-message-menu')
+                .getByRole('button',{name:'메시지 숨기기',exact:true}).click();
+            await page.waitForFunction(()=>window.__stmnContext.chat[2].is_system===true);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(x=>x.is_system===true)),
+                [false,false,true,false,false]);
+        });
+
+        await check('Q12 single message deletion requires server-verified ZIP and explicit confirmation',async setup=>{
+            const page=await setup(6);
+            const reads=[];
+            await page.route('**/api/chats/export',async route=>{
+                reads.push(route.request().postDataJSON().file);
+                const raw=await page.evaluate(()=>{
+                    const ctx=window.__stmnContext;
+                    return [JSON.stringify({chat_metadata:ctx.chatMetadata}),
+                        ...ctx.chat.map(m=>JSON.stringify(m))].join('\n')+'\n';
+                });
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:raw})});
+            });
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                window.__stmnDeleteCalls=[];
+                window.__stmnNativeSaves=0;
+                ctx.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                ctx.saveChat=async()=>{window.__stmnNativeSaves++;};
+                ctx.deleteMessage=async(index,swipe,confirm,withTools)=>{
+                    window.__stmnDeleteCalls.push([index,swipe,confirm,withTools]);
+                    ctx.chat.splice(index,1);
+                    document.querySelector('#chat > .mes[mesid="'+index+'"]')?.remove();
+                    for(const row of document.querySelectorAll('#chat > .mes[mesid]')){
+                        const i=Number(row.getAttribute('mesid'));
+                        if(i>index)row.setAttribute('mesid',String(i-1));
+                    }
+                };
+                const host=document.getElementById('chat');
+                host.replaceChildren();
+                for(let i=0;i<ctx.chat.length;i++){
+                    const el=document.createElement('div');
+                    el.className='mes';el.setAttribute('mesid',String(i));
+                    host.append(el);
+                }
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            const original=await page.evaluate(()=>window.__stmnContext.chat.map(m=>m.mes));
+            await page.locator('[data-action="outline"]').click();
+            const menu=page.locator('.stmn-row[data-index="3"] .stmn-quiet-message-menu');
+            await menu.locator('summary').click();
+            await menu.getByRole('button',{name:'메시지 삭제'}).click();
+            const dialog=page.locator('.stmn-single-message-dialog');
+            await dialog.waitFor({state:'visible'});
+            assert.equal(await dialog.getByRole('button',{name:'③ 메시지 영구 삭제'}).isDisabled(),true);
+            assert.deepEqual(reads,[]);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnDeleteCalls),[]);
+            const downloadPromise=page.waitForEvent('download');
+            await dialog.getByRole('button',{name:'① 원본 채팅 ZIP 다운로드'}).click();
+            const download=await downloadPromise;
+            assert.match(download.suggestedFilename(),/before-single-message-3-delete\.zip$/);
+            await page.waitForFunction(()=>document.querySelector('.stmn-single-message-confirm input')?.disabled===false);
+            assert.equal(await dialog.getByRole('button',{name:'③ 메시지 영구 삭제'}).isDisabled(),true);
+            await dialog.getByRole('checkbox',{name:/원본 ZIP 파일을 저장했고/}).check();
+            await dialog.getByRole('button',{name:'③ 메시지 영구 삭제'}).click();
+            await page.waitForFunction(()=>window.__stmnDeleteCalls.length===1);
+            await page.waitForFunction(()=>document.querySelector('.stmn-single-message-overlay')?.hidden===true);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnDeleteCalls.map(([id,_swipe,confirm,tools])=>[id,confirm,tools])),[[3,false,false]]);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(m=>m.mes)),
+                original.filter((_,i)=>i!==3));
+            assert.equal(await page.evaluate(()=>window.__stmnNativeSaves),2);
+            assert.deepEqual(reads,['chat-a.jsonl','chat-a.jsonl','chat-a.jsonl']);
+        });
+
+        await check('Q12 single message deletion rejects an invalid backup without native mutations',async setup=>{
+            const page=await setup(5);
+            await page.route('**/api/chats/export',async route=>{
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:'{"chat_metadata":{}}\n{"mes":"not-the-real-chat"}\n'})});
+            });
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                window.__stmnDeleted=0;
+                ctx.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                ctx.saveChat=async()=>{};
+                ctx.deleteMessage=async()=>{window.__stmnDeleted++;};
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            const menu=page.locator('.stmn-row[data-index="2"] .stmn-quiet-message-menu');
+            await menu.locator('summary').click();
+            await menu.getByRole('button',{name:'메시지 삭제'}).click();
+            await page.getByRole('button',{name:'① 원본 채팅 ZIP 다운로드'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-single-message-status')?.textContent.includes('백업 실패'));
+            assert.equal(await page.getByRole('button',{name:'③ 메시지 영구 삭제'}).isDisabled(),true);
+            assert.equal(await page.evaluate(()=>window.__stmnDeleted),0);
+        });
+
         await check('D05A Quiet per-chat cover saves locally, displays, exports and unlinks without JSONL writes',async setup=>{
             const page=await setup(4);
             const writes=[];

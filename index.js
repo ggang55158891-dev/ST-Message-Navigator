@@ -247,6 +247,8 @@ class NavigatorApp {
             this.view.editing = -1;
             this.view.messageBatch?.reset();
             this.view.reorderUI?.reset();
+            this.view.singleActions?.close();
+            this.view.exclusiveMenus?.closeExcept(null);
             this.view.query = '';
             this.view.search.value = '';
             this.view.groupCollapsed.clear();
@@ -602,7 +604,7 @@ function initialize() {
     if (app || document.getElementById('stmn-root')) return;
     try {
         app = new NavigatorApp();
-        console.info(PREFIX, 'loaded (v1.23.0)');
+        console.info(PREFIX, 'loaded (v1.24.0)');
     } catch (error) {
         console.error(PREFIX, 'initialization error:', error);
     }
