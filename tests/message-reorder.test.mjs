@@ -172,8 +172,8 @@ test('Q11 server readback also refuses lost title/bookmark or third-party metada
     const modified=structuredClone(ctx.chatMetadata);
     modified[DATA_KEY].bookmarks={};
     modified.tainted=true;
-    const after=JSON.stringify({chat_metadata:modified})+'\\n'+
-        swapped.map(m=>JSON.stringify(m)).join('\\n')+'\\n';
+    const after=JSON.stringify({chat_metadata:modified})+'\n'+
+        swapped.map(m=>JSON.stringify(m)).join('\n')+'\n';
     assert.equal(serverMatchesReorderedBackup(original,after,[1,0,2,3]),false);
 });
 
