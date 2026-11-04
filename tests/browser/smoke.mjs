@@ -532,6 +532,123 @@ async function run() {
         });
 
 
+        await check('D05A Quiet per-chat cover saves locally, displays, exports and unlinks without JSONL writes',async setup=>{
+            const page=await setup(4);
+            const writes=[];
+            page.on('request',request=>{
+                if(['/api/chats/save','/api/chats/delete','/api/chats/rename','/api/chats/group/save']
+                    .some(path=>request.url().includes(path)))writes.push(request.url());
+            });
+            await page.evaluate(async()=>{
+                const {changeLibrary}=await import('/library-operations.js');
+                const owner=window.__stmnView.elevator;
+                owner.callbacks.changeLibrary=action=>changeLibrary(owner.libraryUI.data,action);
+                owner.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-library-card').first().waitFor();
+            const bytes=await page.evaluate(async()=>{
+                const canvas=document.createElement('canvas');
+                canvas.width=32;canvas.height=24;
+                const ctx=canvas.getContext('2d');
+                ctx.fillStyle='#66aa88';ctx.fillRect(0,0,32,24);
+                const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+                return Array.from(new Uint8Array(await blob.arrayBuffer()));
+            });
+            const file={name:'cover.png',mimeType:'image/png',buffer:Buffer.from(bytes)};
+            const second=()=>page.locator('.stmn-library-card').nth(1);
+            await second().locator('.stmn-quiet-item-menu summary').click();
+            const [chooser]=await Promise.all([
+                page.waitForEvent('filechooser'),
+                second().getByRole('button',{name:'표지 이미지 추가'}).click(),
+            ]);
+            await chooser.setFiles(file);
+            await page.waitForFunction(()=>{
+                const owner=window.__stmnView.elevator;
+                return owner.libraryUI.data.records['["character:none","chat-b"]']?.imageRef?.startsWith('stmn-cover:');
+            });
+            const ref=await page.evaluate(()=>window.__stmnView.elevator.libraryUI.data
+                .records['["character:none","chat-b"]'].imageRef);
+            await second().locator('.stmn-chat-cover-thumb').waitFor({state:'visible'});
+            const thumb=await second().locator('.stmn-chat-cover-thumb').evaluate(img=>({
+                loaded:img.complete&&img.naturalWidth>0,
+                src:img.src,
+            }));
+            assert.equal(thumb.loaded,true);
+            assert.match(thumb.src,/^blob:/);
+            const details=await page.evaluate(async()=>{
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
+                const store=new ChatCoverStore();
+                const ref=window.__stmnView.elevator.libraryUI.data
+                    .records['["character:none","chat-b"]'].imageRef;
+                const blob=await store.get(ref);
+                const exportFile=await store.export(ref);
+                store.destroy();
+                return {bytes:blob.size,mime:blob.type,filename:exportFile.filename};
+            });
+            assert.equal(details.mime,'image/png');
+            assert.equal(details.bytes,bytes.length);
+            assert.match(details.filename,/\.png$/);
+            await second().locator('.stmn-quiet-item-menu summary').click();
+            const downloadPromise=page.waitForEvent('download');
+            await second().getByRole('button',{name:'표지 이미지 별도 백업'}).click();
+            const download=await downloadPromise;
+            assert.equal(download.suggestedFilename(),details.filename);
+            await second().locator('.stmn-quiet-item-menu summary').click();
+            page.once('dialog',dialog=>dialog.accept());
+            await second().getByRole('button',{name:'표지 연결 해제'}).click();
+            await page.waitForFunction(()=>window.__stmnView.elevator.libraryUI.data
+                .records['["character:none","chat-b"]']?.imageRef===null);
+            assert.equal(await second().locator('.stmn-chat-cover-thumb').count(),0);
+            // Unlink does not destroy the content-addressed file because another
+            // chat or library backup may still reference it.
+            assert.equal(await page.evaluate(async ref=>{
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
+                const store=new ChatCoverStore();
+                return Boolean(await store.get(ref));
+            },ref),true);
+            await second().locator('.stmn-quiet-item-menu summary').click();
+            const [again]=await Promise.all([
+                page.waitForEvent('filechooser'),
+                second().getByRole('button',{name:'표지 이미지 추가'}).click(),
+            ]);
+            await again.setFiles(file);
+            await page.waitForFunction(()=>window.__stmnView.elevator.libraryUI.data
+                .records['["character:none","chat-b"]']?.imageRef?.startsWith('stmn-cover:'));
+            assert.equal(await page.evaluate(()=>window.__stmnView.elevator.libraryUI.data
+                .records['["character:none","chat-b"]'].imageRef),ref,
+                're-importing an exported cover recovers the same content address');
+            assert.deepEqual(writes,[]);
+        });
+
+        await check('D05A rejects SVG spoofed file and leaves library cover reference unchanged',async setup=>{
+            const page=await setup(3);
+            await page.evaluate(async()=>{
+                const {changeLibrary}=await import('/library-operations.js');
+                const owner=window.__stmnView.elevator;
+                owner.callbacks.changeLibrary=action=>changeLibrary(owner.libraryUI.data,action);
+                owner.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-library-card').first().waitFor();
+            const second=page.locator('.stmn-library-card').nth(1);
+            await second.locator('.stmn-quiet-item-menu summary').click();
+            const [chooser]=await Promise.all([
+                page.waitForEvent('filechooser'),
+                second.getByRole('button',{name:'표지 이미지 추가'}).click(),
+            ]);
+            await chooser.setFiles({
+                name:'bad.svg',mimeType:'image/svg+xml',
+                buffer:Buffer.from('<svg onload="alert(1)"></svg>'),
+            });
+            await page.waitForFunction(()=>document.querySelector('.stmn-library-error')?.textContent.includes('표지 등록 실패'));
+            assert.equal(await page.evaluate(()=>window.__stmnView.elevator.libraryUI.data
+                .records['["character:none","chat-b"]']?.imageRef??null),null);
+            assert.equal(await page.locator('.stmn-chat-cover-thumb').count(),0);
+        });
+
         await check('Q11 drag preview changes no live chat until ZIP consent and explicit apply',async setup=>{
             const page=await setup(8);
             const reads=[];
