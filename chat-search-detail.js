@@ -65,6 +65,12 @@ export async function readDetailedChatMatches({
     const ctx=context();
     normalizeSearchQuery(query);
     const target=validateChatPreviewTarget(ctx,scope,buildings,item);
+    // An upstream building listing is still untrusted data. Explicitly
+    // reject unsafe transport names before passing them to the export API.
+    if(typeof target.id!=='string' || !target.id ||
+       target.id.length>200 || /[/\\\u0000-\u001f\u007f]/.test(target.id) ||
+       target.id==='.' || target.id==='..')
+        throw new Error('정밀 검색 채팅 파일명이 안전하지 않습니다.');
     const chatRef=ctx.chat,activeId=cleanChatId(ctx.chatId);
     const current=activeId===cleanChatId(target.id);
     const stillValid=()=>{
