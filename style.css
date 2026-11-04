@@ -1966,3 +1966,23 @@
         min-width:64px;font-size:8px;
     }
 }
+
+
+/* D-05A: local-only per-chat covers. No external URLs or ST message changes. */
+#stmn-root .stmn-chat-cover-thumb[hidden],
+#stmn-root .stmn-chat-cover-file[hidden]{display:none!important}
+#stmn-root[data-elevator-theme="quiet"] .stmn-chat-cover-thumb{
+    flex:0 0 42px;display:block;width:42px;height:56px;min-width:42px;
+    border-radius:9px;object-fit:cover;object-position:center;
+    border:1px solid #e6e9e5;background:#eef1ec;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-building-card:has(.stmn-chat-cover-thumb:not([hidden])){
+    align-items:flex-start;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-building-card:has(.stmn-chat-cover-thumb:not([hidden]))
+ .stmn-building-card-body{min-width:0;flex:1}
+@container stmnLobby (max-width:420px){
+    #stmn-root[data-elevator-theme="quiet"] .stmn-chat-cover-thumb{
+        flex-basis:35px;width:35px;min-width:35px;height:47px;border-radius:7px;
+    }
+}
