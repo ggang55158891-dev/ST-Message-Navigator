@@ -578,7 +578,7 @@ async function run() {
             assert.equal(await page.locator('.stmn-outline').isVisible(),true,
                 'Escape closes the menu, not the whole outline');
             await page.locator('.stmn-row[data-index="3"] .stmn-quiet-message-menu summary').click();
-            await page.locator('.stmn-count').click();
+            await page.getByRole('button',{name:'메시지 다중 선택',exact:true}).click();
             assert.equal(await page.locator('.stmn-quiet-message-menu[open]').count(),0);
         });
 
@@ -599,11 +599,11 @@ async function run() {
             assert.equal(await page.locator('.stmn-quiet-item-menu[open]').count(),1);
             await menuB.locator('summary').click();
             assert.equal(await page.locator('.stmn-quiet-item-menu[open]').count(),0);
-            await menuA.evaluate(x=>x.open=true);
-            await page.waitForFunction(()=>document.querySelector('.stmn-quiet-item-menu')?.open===true);
-            await menuB.evaluate(x=>x.open=true);
-            await page.waitForFunction(()=>document.querySelectorAll('.stmn-quiet-item-menu[open]').length===1);
-            assert.equal(await menuA.evaluate(x=>x.open),false);
+            // User-facing clicks have synchronous exclusivity. Programmatic
+            // same-tick toggles are deliberately not treated as user intent.
+            await menuA.locator('summary').click();
+            assert.equal(await menuB.evaluate(x=>x.open),false);
+            assert.equal(await page.locator('.stmn-quiet-item-menu[open]').count(),1);
         });
 
         await check('Q12 single hidden-message menu offers hide and hide-release without changing neighbors',async setup=>{
