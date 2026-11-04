@@ -77,7 +77,8 @@ test('E03C uses current in-memory unsaved edits without requesting server files'
         query:'비밀',titles:false,body:true,swipes:false,
         fetcher:()=>{calls++;throw Error('network must not be called');},
     });
-    assert.deepEqual(result.matches.map(x=>x.index),[0]);
+    assert.deepEqual(result.matches.map(x=>x.index),[0,2],
+        'active unsaved text and previously present hidden-message body both match');
     assert.equal(result.source,'current-memory');
     assert.equal(calls,0);
 });
