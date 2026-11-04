@@ -1820,3 +1820,149 @@
     }
     #stmn-root[data-elevator-theme="quiet"] .stmn-message-batch-controls:not([hidden]){padding:7px}
 }
+
+
+/* Q-11: all description text, never a one-line ellipsis. Keep title larger. */
+#stmn-root[data-elevator-theme="quiet"] .stmn-building-card-body{
+    flex-direction:column;align-items:stretch;gap:3px;
+    min-width:0;width:100%;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-building-card-title{
+    max-width:100%;font-size:13px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-description{
+    flex:0 1 auto;display:block;width:100%;min-width:0;max-width:100%;
+    font-size:9px;line-height:1.55;color:#929b95;
+    white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+    overflow:visible;text-overflow:clip;
+    max-height:none;min-height:0;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-quiet-folder-chat-description{
+    font-size:8.5px;line-height:1.5;display:block;width:100%;min-width:0;
+    white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+    overflow:visible;text-overflow:clip;max-height:none;max-width:100%;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-library-card-line{
+    align-items:flex-start;
+}
+
+/* Q-11: virtualized pointer/keyboard reorder mode. No native ST chat DOM edits. */
+#stmn-root .stmn-reorder-entry[hidden],
+#stmn-root .stmn-reorder-panel[hidden]{display:none!important}
+#stmn-root .stmn-reorder-entry,
+#stmn-root .stmn-reorder-panel{display:none}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-entry:not([hidden]){
+    display:flex;flex:none;padding:0 13px 8px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-open{
+    border:1px solid #dce3dc;border-radius:9px;background:#f4f7f4;
+    padding:6px 11px;font-size:11px;font-family:inherit;color:#546458;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel:not([hidden]){
+    display:flex;flex:1;min-height:0;min-width:0;
+    flex-direction:column;gap:9px;padding:9px 13px 7px;color:#38433c;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-head{
+    flex:none;display:flex;align-items:center;justify-content:space-between;gap:7px;
+    font-size:13px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel button{
+    border:1px solid #dfe5dd;border-radius:8px;
+    background:#fff;color:#46564a;padding:6px 9px;
+    font:inherit;font-size:11px;cursor:pointer;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel button:disabled,
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-open:disabled{
+    opacity:.48;cursor:default;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-hint,
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-status{
+    flex:none;margin:0;font-size:10px;color:#7d8880;
+    line-height:1.55;overflow-wrap:anywhere;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-summary{
+    flex:none;font-size:10px;color:#637369;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-viewport{
+    flex:1;min-height:80px;min-width:0;overflow-y:auto;overflow-x:hidden;
+    overscroll-behavior:contain;scrollbar-width:thin;
+    border:1px solid #ebeee9;border-radius:10px;background:#fff;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-spacer{
+    position:relative;width:100%;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-row{
+    position:absolute;left:0;right:0;height:58px;min-width:0;
+    box-sizing:border-box;display:flex;gap:5px;align-items:center;
+    padding:5px 6px;border-bottom:1px solid #eff1ee;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-changed{
+    background:#f5f8f4;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-target{
+    outline:2px solid #78917c;outline-offset:-3px;
+    background:#e8f0e7;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-dragging{
+    opacity:.65;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel .stmn-reorder-handle{
+    flex:none;border:none;background:transparent;font-size:21px;
+    color:#728276;padding:5px;touch-action:none;
+    cursor:grab;user-select:none;-webkit-user-select:none;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-ids{
+    flex:none;font-size:9px;line-height:1.5;min-width:74px;
+    color:#7b867e;font-variant-numeric:tabular-nums;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-row-text{
+    display:flex;flex:1;min-width:0;flex-direction:column;gap:3px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-row-text strong{
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-row-text small{
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+    color:#939d95;font-size:9px;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel .stmn-reorder-up,
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel .stmn-reorder-down{
+    flex:none;width:23px;padding:5px 0;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-actions{
+    display:flex;flex:none;align-items:flex-start;gap:7px;
+    flex-wrap:wrap;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-confirm{
+    display:flex;align-items:flex-start;gap:6px;flex:1 1 100%;
+    font-size:10px;color:#865d4d;line-height:1.55;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-confirm input{
+    flex:none;margin-top:2px;accent-color:#6a806e;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel .stmn-reorder-apply:not(:disabled){
+    color:white;background:#3e5645;border-color:#3e5645;
+}
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel :is(button,input):focus-visible,
+#stmn-root[data-elevator-theme="quiet"] .stmn-reorder-open:focus-visible{
+    outline:2px solid #739078;outline-offset:2px;
+}
+@container stmnLobby (max-width: 420px){
+    #stmn-root[data-elevator-theme="quiet"] .stmn-library-card-line > .stmn-building-card{
+        padding:6px 4px;
+    }
+    #stmn-root[data-elevator-theme="quiet"] .stmn-quiet-chat-description{
+        font-size:9px;
+    }
+}
+@media(max-width:480px){
+    #stmn-root[data-elevator-theme="quiet"] .stmn-reorder-panel:not([hidden]){
+        padding:6px 8px;gap:6px;
+    }
+    #stmn-root[data-elevator-theme="quiet"] .stmn-reorder-row{
+        padding:4px;
+    }
+    #stmn-root[data-elevator-theme="quiet"] .stmn-reorder-ids{
+        min-width:64px;font-size:8px;
+    }
+}
