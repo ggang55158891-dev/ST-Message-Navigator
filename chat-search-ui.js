@@ -205,7 +205,7 @@ export class ChatSearchUI{
             const title=make('strong','',name+
                 (result.index===null?' · 채팅':' · #'+result.index+' '+result.title));
             const note=make('small','',result.field==='server-body'
-                ?'서버 본문 후보 · 정밀 검색으로 정확한 #번호 확인'
+                ?'서버 본문 후보 · 메시지 번호는 채팅을 열어 확인 · 정밀 검색으로 정확한 #번호 찾기'
                 :result.index===null?'파일명·설명·폴더·태그 일치'
                 :result.field==='title'?'제목 일치'
                 :result.field==='swipe'
