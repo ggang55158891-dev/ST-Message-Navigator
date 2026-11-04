@@ -246,6 +246,7 @@ class NavigatorApp {
             this.startLanding = null;
             this.view.editing = -1;
             this.view.messageBatch?.reset();
+            this.view.reorderUI?.reset();
             this.view.query = '';
             this.view.search.value = '';
             this.view.groupCollapsed.clear();
@@ -259,6 +260,10 @@ class NavigatorApp {
             'MESSAGE_EDITED', 'MESSAGE_UPDATED', 'MESSAGE_DELETED',
             'MESSAGE_SWIPED', 'MORE_MESSAGES_LOADED',
         ]) register(key, () => {
+            if (['CHAT_CREATED','MESSAGE_SENT','MESSAGE_RECEIVED','MESSAGE_EDITED',
+                'MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED'].includes(key)) {
+                if(this.view.reorderUI?.active)this.view.reorderUI.reset();
+            }
             if (['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED'].includes(key)) {
                 if (this.view.messageBatch?.selectionMode)this.view.messageBatch.reset();
             }
