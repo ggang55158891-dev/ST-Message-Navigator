@@ -95,6 +95,11 @@ test('E03C blocks out-of-scope character and missing/foreign group chats before 
         context:()=>ctx,scope,buildings:[item],item:{id:'not-in-list'},query:'비밀',
         fetcher,
     }),/목록/);
+    for(const id of ['../escape','other/foreign','bad\\\\file']){
+        await assert.rejects(readDetailedChatMatches({
+            context:()=>ctx,scope,buildings:[{id}],item:{id},query:'비밀',fetcher,
+        }),/안전하지/);
+    }
     const group={groupId:44,groups:[{id:44,chats:['safe']},{id:55,chats:['foreign']}],
         chatId:'safe',chat:[],chatMetadata:{},getRequestHeaders:()=>({})};
     await assert.rejects(readDetailedChatMatches({
