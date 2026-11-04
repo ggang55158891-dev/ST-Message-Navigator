@@ -148,7 +148,8 @@ export async function commitMessageBatch(context,plan){
         if(plan.operation==='hide' || plan.operation==='show'){
             for(const item of originals){
                 if(item.original===item.next)continue;
-                const row=document.querySelector('#chat > .mes[mesid="'+item.index+'"]');
+                const row=typeof document!=='undefined'
+                    ?document.querySelector('#chat > .mes[mesid="'+item.index+'"]'):null;
                 if(row)row.setAttribute('is_system',String(item.original.is_system===true));
                 try{ctx.updateMessageBlock?.(item.index,item.original);}catch {/* viewport may be virtualized */}
             }
