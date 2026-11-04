@@ -10,6 +10,7 @@ import {RecoveryVault} from './recovery-vault.js';
 import {archiveBeforeAction,confirmActionResult} from './recovery-operations.js';
 import {RecoveryBinUI} from './recovery-bin-ui.js';
 import {validateCopyPlan,suggestCopyName,copyChatFile} from './chat-copy.js';
+import {validateBackupSelection} from './file-backup.js';
 
 const element=(tag,cls='',value)=>{
     const node=document.createElement(tag);
@@ -84,10 +85,8 @@ export class FileActionUI {
         try {
             // Apply the shared inactive-chat/group guard even before a new
             // rename destination has been entered.
-            if(kind==='copy') {
-                const suggestion=suggestCopyName(item.id);
-                validateCopyPlan(ctx,scope,owner.buildings,item.id,suggestion);
-            } else validateFilePlan(ctx,scope,owner.buildings,item.id,'delete');
+            if(kind==='copy')validateBackupSelection(ctx,scope,owner.buildings,[item.id]);
+            else validateFilePlan(ctx,scope,owner.buildings,item.id,'delete');
         }catch(error){
             owner.view.setStatus(error.message,true);return false;
         }
