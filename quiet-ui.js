@@ -199,6 +199,10 @@ export class QuietShell {
                 }, 'stmn-quiet-menu-item'));
             }
             this.menuContent.append(make('div', 'stmn-quiet-menu-separator'));
+            this.menuContent.append(action('통합 검색 · 메시지 제목/본문', '통합 검색 · 메시지 제목/본문', () => {
+                this.listMenu.open = false;
+                this.elevator.libraryUI.searchUI.open();
+            }, 'stmn-quiet-menu-item'));
             this.menuContent.append(action('폴더·태그 관리', '폴더·태그 관리', () => {
                 this.toggleManage();
                 this.listMenu.open = false;
