@@ -56,19 +56,6 @@ async function digestOf(blob){
     const result=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));
     return Array.from(result,b=>b.toString(16).padStart(2,'0')).join('');
 }
-async function decodeCover(file){
-    if(typeof createImageBitmap!=='function')
-        throw new Error('이 브라우저는 안전한 이미지 디코딩을 지원하지 않습니다.');
-    // Resize during decode to bound intermediate image sizes where supported.
-    const bitmap=await createImageBitmap(file,{resizeWidth:COVER_MAX_DIMENSION,
-        resizeHeight:COVER_MAX_DIMENSION,resizeQuality:'high'});
-    try{
-        if(!bitmap.width || !bitmap.height)
-            throw new Error('이미지 크기를 읽지 못했습니다.');
-        // createImageBitmap resizeWidth/Height can stretch aspect ratios.
-        // Determine the ORIGINAL dimensions separately for the canvas ratio.
-    }finally{bitmap.close();}
-}
 export async function normalizeCover(file){
     await assertCoverInput(file);
     if(typeof createImageBitmap!=='function')
@@ -186,12 +173,14 @@ export class ChatCoverStore{
         if(!isLocalCoverRef(ref))return;
         img.dataset.coverRef=ref;
         img.hidden=true;
-        void this.preview(img,ref).catch(()=>{
+        // The card is assembled in a detached DocumentFragment. Defer the
+        // first preview until after the parent appends that fragment.
+        queueMicrotask(()=>void this.preview(img,ref).catch(()=>{
             if(img.isConnected && img.dataset.coverRef===ref){
                 img.hidden=true;
                 img.title='이 브라우저에 표지 이미지가 없습니다. 이미지를 다시 등록해 주세요.';
             }
-        });
+        }));
     }
     async export(ref){
         const blob=await this.get(ref);
