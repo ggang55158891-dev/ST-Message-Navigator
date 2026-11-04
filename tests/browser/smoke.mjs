@@ -531,6 +531,140 @@ async function run() {
             assert.deepEqual(JSON.parse(files.get(restoredName).split('\n')[1]).swipes,['첫번째','둘째']);
         });
 
+
+        await check('Q11 drag preview changes no live chat until ZIP consent and explicit apply',async setup=>{
+            const page=await setup(8);
+            const reads=[];
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                window.__stmnSaves=0;
+                window.__stmnReloads=0;
+                window.__serializeChat=()=>[JSON.stringify({chat_metadata:ctx.chatMetadata}),
+                    ...ctx.chat.map(message=>JSON.stringify(message))].join('\n')+'\n';
+                window.__diskChat=window.__serializeChat();
+                ctx.getRequestHeaders=()=>({'Content-Type':'application/json'});
+                ctx.saveChat=async()=>{
+                    window.__stmnSaves++;
+                    window.__diskChat=window.__serializeChat();
+                };
+                ctx.reloadCurrentChat=async()=>{window.__stmnReloads++;};
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.route('**/api/chats/export',async route=>{
+                reads.push(route.request().postDataJSON().file);
+                const current=await page.evaluate(()=>window.__diskChat);
+                await route.fulfill({status:200,contentType:'application/json',
+                    body:JSON.stringify({result:current})});
+            });
+            const original=await page.evaluate(()=>window.__stmnContext.chat.map(x=>x.mes));
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'메시지 순서 변경 모드'}).click();
+            assert.equal(await page.locator('.stmn-reorder-panel').isVisible(),true);
+            const source=page.getByRole('button',{name:'원래 #0 메시지 드래그 손잡이'});
+            const target=page.locator('.stmn-reorder-row[data-position="2"]');
+            const a=await source.boundingBox(),b=await target.boundingBox();
+            assert.ok(a&&b,'first and third rows are rendered');
+            await page.mouse.move(a.x+a.width/2,a.y+a.height/2);
+            await page.mouse.down();
+            await page.mouse.move(b.x+b.width/2,b.y+b.height/2,{steps:8});
+            await page.mouse.up();
+            await page.waitForFunction(()=>document.querySelector('.stmn-reorder-summary')?.textContent.includes('3개 위치 변경'));
+            assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(x=>x.mes)),original);
+            assert.equal(await page.evaluate(()=>window.__stmnSaves),0);
+            assert.equal(await page.getByRole('button',{name:'③ 수정 사항 적용'}).isDisabled(),true);
+            await page.getByRole('button',{name:'① 원본 ZIP 다운로드'}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-reorder-confirm input')?.disabled===false);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(x=>x.mes)),original);
+            assert.equal(await page.evaluate(()=>window.__stmnSaves),1,'backup flush only');
+            await page.getByRole('checkbox',{name:/원본 ZIP을 보관했습니다/}).check();
+            await page.getByRole('button',{name:'③ 수정 사항 적용'}).click();
+            await page.waitForFunction(()=>window.__stmnReloads===1);
+            assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(x=>x.mes)),
+                [original[1],original[2],original[0],...original.slice(3)]);
+            assert.equal(await page.evaluate(()=>window.__stmnSaves),2);
+            assert.deepEqual(reads,['chat-a.jsonl','chat-a.jsonl','chat-a.jsonl']);
+            assert.equal(await page.locator('.stmn-reorder-panel').isVisible(),false);
+        });
+
+        await check('Q11 cancel discards drag preview with zero chat or server writes',async setup=>{
+            const page=await setup(7);
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('quiet','auto'));
+            const original=await page.evaluate(()=>window.__stmnContext.chat.map(x=>x.mes));
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'메시지 순서 변경 모드'}).click();
+            await page.getByRole('button',{name:'새 #1 메시지 한 칸 위로'}).click();
+            assert.match(await page.locator('.stmn-reorder-summary').textContent(),/2개 위치 변경/);
+            await page.getByRole('button',{name:'취소 · 변경 폐기'}).click();
+            assert.deepEqual(await page.evaluate(()=>window.__stmnContext.chat.map(x=>x.mes)),original);
+            assert.equal(await page.locator('.stmn-reorder-panel').isVisible(),false);
+            assert.equal(await page.locator('.stmn-list').isVisible(),true);
+        });
+
+        await check('Q11 12000 message preview stays virtualized and reaches late messages',async setup=>{
+            const page=await setup(12000);
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('quiet','auto'));
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'메시지 순서 변경 모드'}).click();
+            assert.ok(await page.locator('.stmn-reorder-row').count()<55);
+            await page.locator('.stmn-reorder-viewport').evaluate(node=>{
+                node.scrollTop=node.scrollHeight-node.clientHeight;
+                node.dispatchEvent(new Event('scroll'));
+            });
+            await page.waitForFunction(()=>Array.from(document.querySelectorAll('.stmn-reorder-row'))
+                .some(node=>node.dataset.position==='11999'));
+            assert.ok(await page.locator('.stmn-reorder-row').count()<55);
+            await page.getByRole('button',{name:'취소 · 변경 폐기'}).click();
+        });
+
+        await check('Q11 Quiet chat description wraps fully at narrow width, including folder drawer',async setup=>{
+            const page=await setup(4,{width:470,height:760});
+            await page.evaluate(()=>window.__stmnView.elevator.applyTheme('quiet','auto'));
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('tab',{name:'건물 로비'}).click();
+            await page.locator('.stmn-library-card').first().waitFor();
+            const value='오래된 모험을 기록한 설명입니다. '.repeat(13)+'마지막 문장까지 보여야 합니다.';
+            await page.evaluate(async value=>{
+                const {emptyLibrary,emptyRecord,chatReference}=await import('/library-data.js');
+                const data=emptyLibrary();
+                data.records[chatReference('character:none','chat-b')]={
+                    ...emptyRecord(),description:value,
+                };
+                window.__stmnView.elevator.libraryUI.setData(data,'character:none');
+                window.__stmnView.elevator.renderBuildings();
+            },value);
+            const info=page.locator('.stmn-library-card').filter({hasText:'건물 B'});
+            const description=info.locator('.stmn-quiet-chat-description');
+            await description.waitFor();
+            const measure=await description.evaluate(node=>{
+                const font=getComputedStyle(node);
+                const title=node.closest('.stmn-building-card-body').querySelector('.stmn-building-card-title');
+                return {
+                    full:node.textContent,
+                    font:parseFloat(font.fontSize),
+                    titleFont:parseFloat(getComputedStyle(title).fontSize),
+                    whiteSpace:font.whiteSpace,
+                    height:node.getBoundingClientRect().height,
+                    lineHeight:parseFloat(font.lineHeight),
+                    client:node.clientHeight,scroll:node.scrollHeight,
+                };
+            });
+            assert.equal(measure.full,value);
+            assert.ok(measure.font<measure.titleFont);
+            assert.equal(measure.whiteSpace,'pre-wrap');
+            assert.ok(measure.height>measure.lineHeight*2);
+            assert.ok(measure.scroll<=measure.client+1,'description is not clipped');
+            await page.evaluate(()=>window.__stmnView.elevator.libraryUI.setDrawerOpen(true));
+            await page.locator('.stmn-quiet-folder-drawer').waitFor({state:'visible'});
+            // Drawer content is intentionally lazy; expand a section before
+            // asserting the small wrapping description is displayed.
+            const section=page.locator('.stmn-quiet-folder-section').first();
+            await section.locator('summary').click();
+            const folderDescription=section.locator('.stmn-quiet-folder-chat-description').first();
+            await folderDescription.waitFor({state:'visible'});
+            const computed=await folderDescription.evaluate(node=>getComputedStyle(node).whiteSpace);
+            assert.equal(computed,'pre-wrap');
+        });
+
         await check('Q10 Quiet multi-message bookmarks and numbered titles with one ST save each',async setup=>{
             const page=await setup(8);
             await page.evaluate(()=>{
