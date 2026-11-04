@@ -247,6 +247,8 @@ class NavigatorApp {
             this.view.editing = -1;
             this.view.messageBatch?.reset();
             this.view.reorderUI?.reset();
+            this.view.singleActions?.close();
+            this.view.exclusiveMenus?.closeExcept(null);
             this.view.query = '';
             this.view.search.value = '';
             this.view.groupCollapsed.clear();
