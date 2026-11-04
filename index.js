@@ -272,6 +272,9 @@ class NavigatorApp {
                 'MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED'].includes(key)) {
                 if(this.view.reorderUI?.active)this.view.reorderUI.reset();
             }
+            if(['CHAT_CREATED','MESSAGE_SENT','MESSAGE_RECEIVED','MESSAGE_EDITED',
+                'MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED'].includes(key))
+                this.view.elevator?.libraryUI?.searchUI?.onMessageMutation();
             if (['MESSAGE_EDITED','MESSAGE_UPDATED','MESSAGE_DELETED','MESSAGE_SWIPED'].includes(key)) {
                 if (this.view.messageBatch?.selectionMode)this.view.messageBatch.reset();
             }
