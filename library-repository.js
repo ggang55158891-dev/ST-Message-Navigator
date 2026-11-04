@@ -1,5 +1,5 @@
 /** SillyTavern adapter: library metadata only, lazily accessed on user action. */
-import { changeLibrary, moveLibraryReference, forgetLibraryReference, bulkChangeLibrary } from './library-operations.js';
+import { changeLibrary, moveLibraryReference, forgetLibraryReference, bulkChangeLibrary, cloneLibraryReference } from './library-operations.js';
 import { buildingScope } from './building-data.js';
 import {
     LIBRARY_KEY, validateLibrary, mergeLibrary, librarySummary,
