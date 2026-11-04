@@ -655,7 +655,11 @@ async function run() {
             assert.ok(measure.scroll<=measure.client+1,'description is not clipped');
             await page.evaluate(()=>window.__stmnView.elevator.libraryUI.setDrawerOpen(true));
             await page.locator('.stmn-quiet-folder-drawer').waitFor({state:'visible'});
-            const folderDescription=page.locator('.stmn-quiet-folder-chat-description').first();
+            // Drawer content is intentionally lazy; expand a section before
+            // asserting the small wrapping description is displayed.
+            const section=page.locator('.stmn-quiet-folder-section').first();
+            await section.locator('summary').click();
+            const folderDescription=section.locator('.stmn-quiet-folder-chat-description').first();
             await folderDescription.waitFor({state:'visible'});
             const computed=await folderDescription.evaluate(node=>getComputedStyle(node).whiteSpace);
             assert.equal(computed,'pre-wrap');
