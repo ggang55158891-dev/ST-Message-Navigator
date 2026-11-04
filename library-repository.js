@@ -101,6 +101,26 @@ export class LibraryRepository {
         return true;
     }
 
+    /** Clone user metadata after a verified server copy. Never overwrite a
+     * preexisting destination or change source records. */
+    cloneChatRecord(scope,source,destination){
+        const ctx=this.settingsRoot();
+        if(buildingScope(ctx)!==scope)throw new Error('채팅 범위가 변경됐습니다.');
+        if(typeof ctx.saveSettingsDebounced!=='function')
+            throw new Error('SillyTavern 설정 저장 함수를 사용할 수 없습니다.');
+        const settings=ctx.extensionSettings,before=settings[LIBRARY_KEY];
+        const next=cloneLibraryReference(before,scope,source,destination);
+        if(!next.changed)return false;
+        settings[LIBRARY_KEY]=next.library;
+        try{ctx.saveSettingsDebounced();}
+        catch(error){
+            if(before===undefined)delete settings[LIBRARY_KEY];
+            else settings[LIBRARY_KEY]=before;
+            throw error;
+        }
+        return true;
+    }
+
     /**
      * Restore only new or identical entries. The old namespace remains intact
      * on schema/size/conflict errors; unrelated extension settings never change.
