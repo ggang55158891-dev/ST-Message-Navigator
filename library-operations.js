@@ -60,6 +60,13 @@ export function changeLibrary(existing, action) {
                 }
                 record.description = action.value;
                 break;
+            case 'image':
+                if(action.value!==null &&
+                   (typeof action.value!=='string' ||
+                    !/^stmn-cover:[a-f0-9]{64}$/.test(action.value)))
+                    throw new Error('이 확장에서 저장한 로컬 표지 참조만 사용할 수 있습니다.');
+                record.imageRef=action.value;
+                break;
             case 'favorite':
                 if (typeof action.value !== 'boolean') throw new Error('즐겨찾기 상태가 유효하지 않습니다.');
                 record.favorite = action.value;
@@ -107,7 +114,7 @@ export function selectLibraryChats(buildings, scope, library, {
             .join(' ').toLocaleLowerCase();
         if (search && !text.includes(search)) continue;
         list.push({ ...building, reference, alias: record.alias, description: record.description, favorite: record.favorite,
-            folderId: record.folderId, folderName, tagIds: record.tagIds,
+            folderId: record.folderId, folderName, tagIds: record.tagIds, imageRef: record.imageRef,
             tagNames, displayName: record.alias || building.name,
             createdAt: record.createdAt ? Date.parse(record.createdAt) || 0 : 0 });
     }
