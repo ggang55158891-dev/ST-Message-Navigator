@@ -52,7 +52,8 @@ export function matchSearchMessage(message,metadata,{query,needle,titles=true,bo
     }
     if(!titleHit&&!bodyHit&&swipeIndex<0)return null;
     const field=titleHit?'title':bodyHit?'body':'swipe';
-    const target=field==='title'?title:field==='body'?raw:message.swipes[swipeIndex];
+    const target=field==='title'?(bodyHit?raw:title):
+        field==='body'?raw:message.swipes[swipeIndex];
     return {
         type:'message',field,title:titleHit?title:getTitle(message,metadata),
         excerpt:searchExcerpt(target,query),
