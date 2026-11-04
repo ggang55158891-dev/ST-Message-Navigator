@@ -3,7 +3,7 @@ import {buildingScope,cleanChatId} from './building-data.js';
 import {selectLibraryChats} from './library-operations.js';
 import {
     SEARCH_BATCH_SIZE,SEARCH_MAX_RESULTS,metadataMatches,normalizeSearchQuery,
-    projectChatMatches,readChatMatches,
+    projectChatMatches,readChatMatches,searchServerBodyCandidates,
 } from './chat-search.js';
 
 const make=(tag,cls='',text)=>{
@@ -62,14 +62,20 @@ export class ChatSearchUI{
         scopes.append(meta.wrapper,title.wrapper,body.wrapper);
         this.searchButton=button('검색','stmn-chat-search-start',()=>{});
         this.searchButton.type='submit';
+        this.serverButton=button('대용량 본문 후보 찾기 · 서버 검색',
+            'stmn-chat-search-server',()=>void this.searchServer());
+        this.serverButton.title='서버가 채팅 파일을 직접 검색하고 일치할 가능성이 있는 채팅 이름만 돌려줍니다. 정확한 메시지 번호는 제공하지 않습니다.';
         this.cancelButton=button('중단','stmn-chat-search-cancel',()=>this.cancel());
         this.cancelButton.hidden=true;
-        this.form.append(this.input,scopes,this.searchButton,this.cancelButton);
+        this.form.append(this.input,scopes,this.searchButton,this.serverButton,this.cancelButton);
         this.form.addEventListener('submit',event=>{
             event.preventDefault();void this.search(false);
         });
         for(const input of [this.input,this.meta,this.titles,this.body]){
-            input.addEventListener('input',()=>this.resetResults());
+            input.addEventListener('input',()=>{
+                this.resetResults();
+                this.serverButton.disabled=!this.body.checked;
+            });
         }
         this.status=make('p','stmn-chat-search-status','');
         this.status.setAttribute('role','status');
@@ -111,6 +117,7 @@ export class ChatSearchUI{
         this.controller=null;
         this.searchButton.disabled=false;
         this.cancelButton.hidden=true;
+        this.serverButton.disabled=!this.body.checked;
         this.nextButton.hidden=true;
         this.status.textContent='검색을 중단했습니다. 새로 검색할 수 있습니다.';
     }
@@ -125,6 +132,7 @@ export class ChatSearchUI{
         this.list.replaceChildren();
         this.searchButton.disabled=false;
         this.cancelButton.hidden=true;
+        this.serverButton.disabled=!this.body.checked;
         this.nextButton.hidden=true;
         this.status.textContent='검색 조건이 변경되었습니다. 검색을 눌러 적용하세요.';
     }
@@ -142,6 +150,7 @@ export class ChatSearchUI{
         this.nextButton.hidden=true;
         this.searchButton.disabled=false;
         this.cancelButton.hidden=true;
+        this.serverButton.disabled=!this.body.checked;
     }
 
     invalidate(){this.close();}
@@ -156,8 +165,10 @@ export class ChatSearchUI{
                 name+(result.index===null?' · 채팅 열기':' · #'+result.index+' 메시지로 이동'));
             const title=make('strong','',name+
                 (result.index===null?' · 채팅':' · #'+result.index+' '+result.title));
-            const note=make('small','',result.index===null
-                ?'파일명·설명·폴더·태그 일치':result.field==='title'?'제목 일치':'본문 일치');
+            const note=make('small','',result.field==='server-body'
+                ?'서버 본문 후보 · 메시지 번호는 채팅을 열어 확인'
+                :result.index===null?'파일명·설명·폴더·태그 일치'
+                :result.field==='title'?'제목 일치':'본문 일치');
             row.append(title,note);
             if(result.excerpt)row.append(make('span','',result.excerpt));
             fragment.append(row);
@@ -176,6 +187,74 @@ export class ChatSearchUI{
         if(index!==null && buildingScope(ctx)===scope &&
            cleanChatId(ctx.chatId)===cleanChatId(item.id)){
             await this.owner.view.callbacks.goToIndex?.(index);
+        }
+    }
+
+    /**
+     * One explicit server-side candidate lookup. Does not download all chat
+     * bodies or claim exact message numbers; the server searches current
+     * message text with its own token matching rules.
+     */
+    async searchServer(){
+        if(!this.opened || this.controller || this.owner.busy ||
+           !this.body.checked || !this.isValid(this.scope))return false;
+        let query;
+        try{query=normalizeSearchQuery(this.input.value);}
+        catch(error){this.status.textContent=error.message;return false;}
+        const scope=this.scope,owner=this.owner;
+        const candidates=selectLibraryChats(owner.buildings,scope,this.library.data,{
+            view:'all',query:'',sort:owner.sort.value,
+        });
+        const indexed=new Map(candidates.map(item=>[cleanChatId(item.id),item]));
+        const controller=new AbortController(),serial=++this.serial;
+        this.controller=controller;
+        this.searchButton.disabled=true;
+        this.serverButton.disabled=true;
+        this.cancelButton.hidden=false;
+        this.nextButton.hidden=true;
+        this.results=[];
+        this.list.replaceChildren();
+        this.status.textContent='SillyTavern 서버에서 본문 후보를 찾는 중… 서버에서 전체 채팅을 검사할 수 있습니다.';
+        try{
+            const found=await searchServerBodyCandidates({
+                context:owner.callbacks.context,scope,buildings:owner.buildings,
+                query,signal:controller.signal,
+            });
+            if(controller.signal.aborted || serial!==this.serial || !this.isValid(scope))
+                return false;
+            // Current chat's unsaved content may not exist on the server.
+            const ctx=owner.callbacks.context();
+            const active=cleanChatId(ctx.chatId);
+            const local=projectChatMatches([
+                {chat_metadata:ctx.chatMetadata||{}},...(ctx.chat||[]),
+            ],{query,titles:false,body:true,limit:1});
+            const ids=new Set(found);
+            if(local.length && indexed.has(active))ids.add(active);
+            const all=[...ids].filter(id=>indexed.has(id));
+            this.results=all.slice(0,SEARCH_MAX_RESULTS).map(id=>({
+                item:indexed.get(id),index:null,field:'server-body',
+                title:'',excerpt:'채팅을 열어 위치를 확인하세요.',
+            }));
+            this.offset=0;
+            this.renderResults();
+            this.status.textContent='서버 본문 후보 '+all.length+
+                '개 채팅 · '+this.results.length+'개 표시'+
+                (all.length>SEARCH_MAX_RESULTS?' · 나머지 결과는 더 구체적인 검색어로 확인하세요.':'')+
+                ' · 메시지 번호·사용자 제목·다른 스와이프 답변까지 검색한 결과는 아닙니다.';
+            return true;
+        }catch(error){
+            if(serial===this.serial && this.isValid(scope)){
+                this.status.textContent=aborted(error)?'서버 검색이 취소되었습니다.':
+                    '서버 검색을 완료하지 못했습니다: '+(error?.message||'알 수 없음');
+            }
+            return false;
+        }finally{
+            if(this.controller===controller){
+                this.controller=null;
+                this.searchButton.disabled=false;
+                this.serverButton.disabled=!this.body.checked;
+                this.cancelButton.hidden=true;
+            }
         }
     }
 
@@ -204,6 +283,7 @@ export class ChatSearchUI{
         const serial=++this.serial;
         this.controller=controller;
         this.searchButton.disabled=true;
+        this.serverButton.disabled=true;
         this.cancelButton.hidden=false;
         this.nextButton.hidden=true;
         this.results=[];
@@ -279,6 +359,7 @@ export class ChatSearchUI{
             if(this.controller===controller){
                 this.controller=null;
                 this.searchButton.disabled=false;
+                this.serverButton.disabled=!this.body.checked;
                 this.cancelButton.hidden=true;
             }
         }
