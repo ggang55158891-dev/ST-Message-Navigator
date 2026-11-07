@@ -242,6 +242,38 @@ async function run() {
             assert.match(await page.locator('.stmn-elevator-building').innerText(), /chat-b/);
         });
 
+        await check('H01 settings compatibility check is read-only and exposes no chat text',async setup=>{
+            const page=await setup(2,undefined,true);
+            const writes=[];
+            page.on('request',req=>{
+                if(['/api/chats/','/api/groups/'].some(path=>req.url().includes(path)))
+                    writes.push(req.url());
+            });
+            await page.locator('#stmn-settings > details > summary').click();
+            await page.locator('#stmn-diagnostics > summary').click();
+            assert.equal(await page.locator('.stmn-environment-check-result').isVisible(),false);
+            const before=await page.evaluate(()=>({
+                saves:window.__themeSaveCount,
+                chat:JSON.stringify(window.__themeAppContext.chat),
+                settings:JSON.stringify(window.__themeAppContext.extensionSettings),
+            }));
+            await page.getByRole('button',{name:'사용 환경 점검 (읽기 전용)'}).click();
+            const report=page.locator('.stmn-environment-check-result');
+            await report.waitFor({state:'visible'});
+            assert.match(await report.textContent(),/준비 확인/);
+            assert.match(await report.textContent(),/추가 확인/);
+            assert.match(await report.textContent(),/saveChat/);
+            assert.match(await report.textContent(),/API 존재 여부만 점검/);
+            const after=await page.evaluate(()=>({
+                saves:window.__themeSaveCount,
+                chat:JSON.stringify(window.__themeAppContext.chat),
+                settings:JSON.stringify(window.__themeAppContext.extensionSettings),
+            }));
+            assert.deepEqual(after,before);
+            assert.deepEqual(writes,[]);
+            assert.equal((await report.textContent()).includes('Theme test one'),false);
+        });
+
         await check('actual extension settings select applies Quiet, persists, and survives reload', async setup => {
             const page = await setup(2, undefined, true);
             const themeSelect = page.locator('#stmn-elevator-theme');
