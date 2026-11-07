@@ -19,6 +19,7 @@ import {projectDetailedChatMatches} from './chat-search-detail.js';
 export const ACTIVE_INDEX_MAX_MESSAGES=20000;
 export const ACTIVE_INDEX_MAX_SOURCE_BYTES=6*1024*1024;
 export const ACTIVE_INDEX_YIELD_EVERY=256;
+export const ACTIVE_INDEX_MAX_SWIPES_PER_MESSAGE=64;
 const BIT_WORDS=8;
 const isObj=value=>Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
 const abort=()=>new DOMException('검색 대상 또는 메시지가 변경됐습니다. 다시 검색해 주세요.','AbortError');
@@ -69,6 +70,14 @@ function snapshot(message,metadata,prior,fields){
     const title=fields.titles||prior?.titleBits?getTitle(message,metadata):'';
     const swipes=fields.swipes||prior?.swipeBits
         ?(Array.isArray(message.swipes)?message.swipes:[]):[];
+    // Bounds are checked BEFORE normalization/bloom construction. Very large
+    // messages or pathological swipe arrays use the existing streaming scan.
+    let bytes=128+(raw.length+title.length)*2;
+    if(swipes.length>ACTIVE_INDEX_MAX_SWIPES_PER_MESSAGE)
+        return {oversized:true,bytes:ACTIVE_INDEX_MAX_SOURCE_BYTES+1};
+    for(const text of swipes)bytes+=32+(typeof text==='string'?text.length*2:0);
+    if(bytes>ACTIVE_INDEX_MAX_SOURCE_BYTES)
+        return {oversized:true,bytes};
     const rawSame=prior?.message===message && prior.raw===raw;
     const titleSame=prior?.message===message && prior.title===title;
     const swipesSame=prior?.message===message && sameSwipes(prior.swipes,swipes);
@@ -83,8 +92,6 @@ function snapshot(message,metadata,prior,fields){
         :(swipesSame?prior?.swipeBits??null:null);
     // Count source references and per-swipe overhead too: no hidden unbounded
     // arrays, even if the strings are zero-length.
-    let bytes=128+(raw.length+title.length)*2;
-    for(const text of swipes)bytes+=32+(typeof text==='string'?text.length*2:0);
     return {message,raw,title,swipes:swipes.slice(),bodyBits,titleBits,swipeBits,
         bytes,changed:!rawSame||!titleSame||!swipesSame||
             (fields.body&&!prior?.bodyBits)||
@@ -155,7 +162,7 @@ export class ActiveChatSearchIndex{
             }
             const entry=snapshot(chat[i],metadata,structural?null:prior[i],fields);
             bytes+=entry.bytes;
-            if(bytes>ACTIVE_INDEX_MAX_SOURCE_BYTES){
+            if(entry.oversized || bytes>ACTIVE_INDEX_MAX_SOURCE_BYTES){
                 guard();
                 const output=await projectDetailedChatMatches([{chat_metadata:metadata},...chat],{
                     query,titles,body,swipes,limit,signal,
