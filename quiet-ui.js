@@ -30,7 +30,8 @@ export class QuietShell {
 
         const header = this.view.panel.querySelector('.stmn-outline-header');
         this.headerActions = make('div', 'stmn-quiet-header-actions');
-        this.searchButton = action('검색 열기', '⌕', () => this.toggleSearch());
+        this.searchButton = action('검색 열기', '⌕', () => void this.toggleSearch());
+        this.searchButton.setAttribute('aria-expanded','false');
         this.folderButton = action('폴더 탐색 열기', '', () => {
             if (this.activeTab === 'buildings' && this.isQuiet) {
                 this.elevator.libraryUI.setDrawerOpen();
@@ -90,7 +91,8 @@ export class QuietShell {
                     event.stopPropagation();
                 } else if (this.searchOpen && this.view.editing < 0) {
                     this.toggleSearch(false);
-                    event.stopPropagation();
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
                 }
             }
         };
@@ -104,27 +106,24 @@ export class QuietShell {
         return this.root.dataset.elevatorTheme === 'quiet';
     }
 
-    toggleSearch(force) {
-        if (!this.isQuiet) return;
-        this.searchOpen = typeof force === 'boolean' ? force : !this.searchOpen;
-        if (!this.searchOpen) {
-            // A hidden nonempty query is confusing. Closing search resets it.
-            const input = this.activeTab === 'buildings' ? this.elevator.search : this.view.search;
-            if (input.value) {
-                input.value = '';
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
+    async toggleSearch(force) {
+        if(!this.isQuiet)return;
+        const search=this.elevator.libraryUI.searchUI;
+        const wanted=typeof force==='boolean'?force:!search.opened;
+        this.listMenu.open=false;
+        this.globalMenu.open=false;
+        if(!wanted){
+            search.close();
+        }else{
+            await search.open(this.activeTab==='buildings'?'all':'current');
         }
         this.refresh();
-        if (this.searchOpen) {
-            const input = this.activeTab === 'buildings' ? this.elevator.search : this.view.search;
-            input.focus();
-        }
     }
 
     setTab(tab) {
         this.activeTab = tab === 'buildings' ? 'buildings' : 'floors';
         this.searchOpen = false;
+        this.elevator.libraryUI.searchUI?.close();
         this.listMenu.open = false;
         this.globalMenu.open = false;
         this.refresh();
@@ -148,6 +147,11 @@ export class QuietShell {
     }
 
     refresh() {
+        this.searchOpen=Boolean(this.elevator.libraryUI?.searchUI?.opened);
+        this.searchButton.setAttribute('aria-expanded',String(this.searchOpen));
+        this.searchButton.setAttribute('aria-label',this.searchOpen?'검색 닫기':'검색 열기');
+        this.searchButton.title=this.searchOpen?'검색 닫기':'검색 열기';
+        this.searchButton.classList.toggle('stmn-quiet-search-active',this.searchOpen);
         this.root.dataset.quietSearch = this.searchOpen ? 'open' : 'closed';
         this.root.dataset.quietManage = this.manageOpen ? 'open' : 'closed';
         this.refreshContext();
@@ -199,10 +203,6 @@ export class QuietShell {
                 }, 'stmn-quiet-menu-item'));
             }
             this.menuContent.append(make('div', 'stmn-quiet-menu-separator'));
-            this.menuContent.append(action('통합 검색 · 메시지 제목/본문', '통합 검색 · 메시지 제목/본문', () => {
-                this.listMenu.open = false;
-                this.elevator.libraryUI.searchUI.open();
-            }, 'stmn-quiet-menu-item'));
             this.menuContent.append(action('폴더·태그 관리', '폴더·태그 관리', () => {
                 this.toggleManage();
                 this.listMenu.open = false;
