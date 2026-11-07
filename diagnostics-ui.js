@@ -1,8 +1,10 @@
+import {inspectRuntimeCompatibility} from './compatibility-preflight.js';
+
 /**
  * Diagnostic settings UI. All exported data comes from the strict Diagnostics
  * serializer; never include original chat text, IDs, names or exception messages.
  */
-export function installDiagnosticsSettings(container, settings, onChange, diagnostics) {
+export function installDiagnosticsSettings(container, settings, onChange, diagnostics, contextProvider) {
     if (!diagnostics) return;
     const create = (tag, label = '', className = '') => {
         const node = document.createElement(tag);
@@ -16,6 +18,36 @@ export function installDiagnosticsSettings(container, settings, onChange, diagno
     const body = create('div', '', 'stmn-diagnostics-body');
     const desc = create('p',
         '자세한 진단은 기본적으로 꺼져 있습니다. 오류는 꺼진 상태에서도 최근 항목만 메모리에 보관합니다. 채팅 원문·파일명·캐릭터명·오류 메시지는 수집하지 않습니다.');
+    // H-01: one opt-in, read-only availability check. Unlike a destructive
+    // self-test it never invokes any ST mutation or opens browser storage.
+    const environment = create('div','','stmn-environment-check');
+    const environmentButton=create('button','사용 환경 점검 (읽기 전용)');
+    environmentButton.type='button';
+    environmentButton.className='stmn-environment-check-button';
+    const environmentResult=create('div','','stmn-environment-check-result');
+    environmentResult.setAttribute('role','status');
+    environmentResult.hidden=true;
+    environmentButton.addEventListener('click',()=>{
+        try{
+            const report=inspectRuntimeCompatibility(contextProvider);
+            const heading=create('p',
+                '준비 확인 '+report.ready+'개 · 추가 확인 '+report.needsAttention+'개');
+            const list=create('ul');
+            for(const check of report.checks){
+                const item=create('li');
+                item.textContent=(check.status==='ready'?'✓ ':'! ')+check.label+
+                    (check.status==='ready'?' · 인터페이스 확인':' · '+check.help);
+                list.append(item);
+            }
+            const note=create('p',report.note);
+            environmentResult.replaceChildren(heading,list,note);
+            environmentResult.hidden=false;
+        }catch{
+            environmentResult.textContent='점검 중 오류가 발생했습니다. SillyTavern을 다시 열어 주세요.';
+            environmentResult.hidden=false;
+        }
+    });
+    environment.append(environmentButton,environmentResult);
     const label = create('label', '', 'stmn-diagnostics-toggle');
     const toggle = create('input');
     toggle.type = 'checkbox';
@@ -53,7 +85,7 @@ export function installDiagnosticsSettings(container, settings, onChange, diagno
     });
     download.addEventListener('click', () => {
         try {
-            const text = diagnostics.exportJSON({ extensionVersion: '1.3.1' });
+            const text = diagnostics.exportJSON({ extensionVersion: '1.29.0' });
             const url = URL.createObjectURL(new Blob([text], { type: 'application/json;charset=utf-8' }));
             const link = document.createElement('a');
             link.href = url;
@@ -70,7 +102,7 @@ export function installDiagnosticsSettings(container, settings, onChange, diagno
             feedback.textContent = '다운로드가 실패했습니다. 브라우저 파일 저장 권한을 확인하세요.';
         }
     });
-    body.append(desc, label, actions, feedback, output);
+    body.append(desc, environment, label, actions, feedback, output);
     details.append(body);
     container.append(details);
 }
