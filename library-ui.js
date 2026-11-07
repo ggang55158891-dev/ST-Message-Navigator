@@ -271,7 +271,7 @@ export class LibraryLobby {
 
     setData(data, scope) {
         this.previewUI.invalidate(scope);
-        this.searchUI.invalidate();
+        if(!this.searchUI.opening)this.searchUI.invalidate();
         if (this.loadedScope !== scope) {
             this.fileUI.reset(scope);
             this.fileActions.dismissOnNavigation();
