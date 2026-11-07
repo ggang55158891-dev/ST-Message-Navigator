@@ -294,6 +294,7 @@ export class ChatSearchUI{
             const note=make('small','',result.field==='server-body'
                 ?'서버 본문 후보 · 메시지 번호는 채팅을 열어 확인 · 정밀 검색으로 정확한 #번호 찾기'
                 :result.index===null?'파일명·설명·폴더·태그 일치'
+                :result.field==='number'?'메시지 번호로 이동'
                 :result.field==='title'?'제목 일치'
                 :result.field==='swipe'
                     ?'다른 스와이프 '+(result.swipeIndex+1)+'번 일치 · 메시지로 이동(답변은 유지)'
@@ -317,7 +318,8 @@ export class ChatSearchUI{
     async goToResult(result){
         if(this.controller || this.owner.busy || !this.isValid(this.scope))return;
         const scope=this.scope,item=result.item,index=result.index;
-        if(!this.owner.buildings.some(x=>cleanChatId(x.id)===cleanChatId(item.id)))return;
+        if(!this.owner.buildings.some(x=>cleanChatId(x.id)===cleanChatId(item.id)) &&
+           cleanChatId(this.owner.callbacks.context().chatId)!==cleanChatId(item.id))return;
         this.close();
         await this.owner.enter(item);
         const ctx=this.owner.callbacks.context();
