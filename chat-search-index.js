@@ -56,7 +56,7 @@ function makeSwipeBloom(swipes){
 function canContain(bits,mask){
     if(!bits)return true; // unindexed field: safe exact-match fallback
     for(let i=0;i<BIT_WORDS;i++){
-        if((bits[i]&mask[i])!==mask[i])return false;
+        if(((bits[i]&mask[i])>>>0)!==mask[i])return false;
     }
     return true;
 }
