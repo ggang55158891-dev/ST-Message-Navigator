@@ -418,6 +418,7 @@ export class NavigatorView {
     toggle(force) {
         this.panelOpen = typeof force === 'boolean' ? force : !this.panelOpen;
         this.panel.hidden = !this.panelOpen;
+        if(!this.panelOpen)this.elevator?.libraryUI?.searchUI?.close();
         this.navButtons.get('outline')?.classList.toggle('stmn-button-selected', this.panelOpen);
         this.navButtons.get('outline')?.setAttribute('aria-expanded', String(this.panelOpen));
         if (this.panelOpen) {
