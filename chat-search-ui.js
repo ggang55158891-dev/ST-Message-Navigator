@@ -3,6 +3,7 @@ import {buildingScope,cleanChatId} from './building-data.js';
 import {selectLibraryChats} from './library-operations.js';
 import {readDetailedChatMatches,projectDetailedChatMatches} from './chat-search-detail.js';
 import {getTitle} from './model.js';
+import {ActiveChatSearchIndex} from './chat-search-index.js';
 import {
     SEARCH_BATCH_SIZE,SEARCH_MAX_RESULTS,metadataMatches,normalizeSearchQuery,
     projectChatMatches,readChatMatches,searchServerBodyCandidates,
@@ -39,6 +40,7 @@ export class ChatSearchUI{
         this.offset=0;
         this.results=[];
         this.detailTargets=new Map();
+        this.activeIndex=new ActiveChatSearchIndex();
         this.range='all';
         this.openSequence=0;
         this.opening=false;
@@ -256,6 +258,7 @@ export class ChatSearchUI{
         this.controller?.abort();
         this.controller=null;
         const wasOpen=this.opened;
+        this.activeIndex.clear();
         this.opened=false;
         this.scope=null;
         this.detailTargets.clear();
@@ -276,6 +279,7 @@ export class ChatSearchUI{
 
     invalidate(){this.close();}
     onMessageMutation(){
+        this.activeIndex.markDirty();
         if(!this.opened)return;
         this.resetResults();
         this.status.textContent='메시지가 변경됐습니다. 정확한 위치를 확인하려면 다시 검색해 주세요.';
@@ -431,6 +435,10 @@ export class ChatSearchUI{
                 buildings:this.owner.buildings,item,query,
                 titles:config.titles,body:config.body,swipes:config.swipes,
                 signal:controller.signal,
+                currentProjector:(chat,metadata,options)=>
+                    this.activeIndex.search(chat,metadata,{
+                        ...options,scope,chatId:cleanChatId(item.id),
+                    }),
             });
             if(controller.signal.aborted || serial!==this.serial || !this.isValid(scope))
                 return false;
@@ -490,9 +498,9 @@ export class ChatSearchUI{
                         excerpt:'메시지 번호 #'+index+'로 바로 이동'}];
                 }
             }else{
-                const messages=[{chat_metadata:ctx.chatMetadata||{}},...ctx.chat];
-                const found=await projectDetailedChatMatches(messages,{
-                    query,titles:this.titles.checked,body:this.body.checked,
+                const found=await this.activeIndex.search(ctx.chat,ctx.chatMetadata||{},{
+                    query,scope,chatId:id,
+                    titles:this.titles.checked,body:this.body.checked,
                     swipes:this.swipeMain.checked,signal:controller.signal,
                     stillValid:()=>this.isValid(scope) &&
                         this.owner.callbacks.context().chat===ctx.chat &&
@@ -581,10 +589,15 @@ export class ChatSearchUI{
                         let matches;
                         if(current){
                             // In-memory current chat is authoritative for unsaved edits.
-                            const messages=[{chat_metadata:ctx.chatMetadata||{}},...(ctx.chat||[])];
-                            matches=projectChatMatches(messages,{
-                                query,titles:config.titles,body:config.body,
+                            const found=await this.activeIndex.search(ctx.chat,ctx.chatMetadata||{},{
+                                query,scope,chatId:cleanChatId(item.id),
+                                titles:config.titles,body:config.body,swipes:false,
+                                limit:4,signal:controller.signal,
+                                stillValid:()=>this.isValid(scope) &&
+                                    this.owner.callbacks.context().chat===ctx.chat &&
+                                    cleanChatId(this.owner.callbacks.context().chatId)===cleanChatId(item.id),
                             });
+                            matches=found.matches;
                         }else{
                             const found=await readChatMatches(ctx,scope,owner.buildings,item,{
                                 query,titles:config.titles,body:config.body,
@@ -645,5 +658,5 @@ export class ChatSearchUI{
         }
     }
 
-    destroy(){this.close();this.panel.remove();}
+    destroy(){this.close();this.activeIndex.clear();this.panel.remove();}
 }
