@@ -3,7 +3,7 @@
  * authentication; no direct git commands or public GitHub-version guesses.
  */
 export const EXTENSION_FOLDER = 'ST-Message-Navigator';
-export const EXTENSION_VERSION = '1.26.0';
+export const EXTENSION_VERSION = '1.27.0';
 
 /** Values are untrusted HTTP response data, never HTML. */
 export function parseExtensionVersion(payload) {
