@@ -1520,6 +1520,106 @@ async function run() {
             assert.equal(await page.getByRole('tab',{name:'층 안내'}).getAttribute('aria-selected'),'true');
         });
 
+        await check('E03D current-chat searches reuse bounded index, refresh direct edits and clear on close',async setup=>{
+            const page=await setup(12);
+            const reads=[],writes=[];
+            page.on('request',req=>{
+                const url=req.url();
+                if(['/api/chats/get','/api/chats/export','/api/chats/search'].some(x=>url.includes(x)))
+                    reads.push(url);
+                if(['/api/chats/save','/api/chats/delete','/api/chats/rename'].some(x=>url.includes(x)))
+                    writes.push(url);
+            });
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.chat[6].swipes=['초기 스와이프','태양 아래의 특별한 약속'];
+                ctx.chat[6].swipe_id=0;
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'검색 열기'}).click();
+            const input=page.getByRole('searchbox',{name:'통합 검색어'});
+            const ui=()=>page.evaluate(()=>{
+                const cache=window.__stmnView.elevator.libraryUI.searchUI.activeIndex;
+                return {count:cache.entries.length,bytes:cache.bytes,chatBound:cache.chat===window.__stmnContext.chat};
+            });
+            assert.equal((await ui()).count,0,'never index when opening the search interface');
+            await input.fill('특별한 약속');
+            await page.getByRole('button',{name:'검색',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-status')?.textContent.includes('0개'));
+            let state=await ui();
+            assert.deepEqual(reads,[]);
+            assert.deepEqual(writes,[]);
+            assert.equal(state.count,12);
+            assert.equal(state.chatBound,true);
+            await page.locator('.stmn-unified-search-options > summary').click();
+            await page.getByLabel('다른 스와이프의 답변',{exact:true}).check();
+            await page.getByRole('button',{name:'검색',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#6'));
+            assert.match(await page.locator('.stmn-chat-search-result').textContent(),/스와이프 2번 일치/);
+            await input.fill('완전히 새로운 낱말');
+            await page.evaluate(()=>{
+                window.__stmnContext.chat[4].mes='완전히 새로운 낱말';
+            });
+            await page.getByRole('button',{name:'검색',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#4'));
+            state=await ui();
+            assert.equal(state.count,12);
+            assert.equal(state.chatBound,true);
+            const spy=await page.evaluate(()=>{
+                const cache=window.__stmnView.elevator.libraryUI.searchUI.activeIndex;
+                return cache.search(window.__stmnContext.chat,window.__stmnContext.chatMetadata,{
+                    query:'완전히 새로운 낱말',scope:'character:none',
+                    chatId:'chat-a',titles:true,body:true,swipes:true,
+                }).then(result=>({updated:result.updated,reused:result.reused,mode:result.mode}));
+            });
+            assert.equal(spy.updated,0,'repeated unchanged search reuses all snapshots');
+            assert.equal(spy.reused,12);
+            assert.equal(spy.mode,'indexed');
+            assert.deepEqual(reads,[]);
+            assert.deepEqual(writes,[]);
+            await page.getByRole('button',{name:'검색 닫기',exact:true}).click();
+            state=await ui();
+            assert.equal(state.count,0,'temporary source references must be freed on search close');
+            assert.equal(state.bytes,0);
+            assert.equal(state.chatBound,false);
+        });
+
+        await check('E03D native mutation invalidates results; title and reorder scans never retain stale numbers',async setup=>{
+            const page=await setup(7);
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.chat[2].stmn_message_id_v1='custom-e03d';
+                ctx.chatMetadata.stmn_message_outline_v1={
+                    titles:{'custom-e03d':'과거의 비밀 이름'},
+                };
+                window.__stmnView.elevator.applyTheme('quiet','auto');
+            });
+            await page.locator('[data-action="outline"]').click();
+            await page.getByRole('button',{name:'검색 열기'}).click();
+            const input=page.getByRole('searchbox',{name:'통합 검색어'});
+            await input.fill('과거의 비밀 이름');
+            await page.getByRole('button',{name:'검색',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#2'));
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.chatMetadata.stmn_message_outline_v1.titles['custom-e03d']='변경된 비밀 이름';
+                window.__stmnView.elevator.libraryUI.searchUI.onMessageMutation();
+            });
+            assert.equal(await page.locator('.stmn-chat-search-result').count(),0,
+                'a ST edit must clear old results immediately');
+            await input.fill('변경된 비밀 이름');
+            await page.getByRole('button',{name:'검색',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#2'));
+            await page.evaluate(()=>{
+                const ctx=window.__stmnContext;
+                ctx.chat.splice(0,1);
+            });
+            await page.getByRole('button',{name:'검색',exact:true}).click();
+            await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#1'));
+            await page.getByRole('button',{name:'검색 닫기',exact:true}).click();
+        });
+
         await check('E03C server candidate drills down to precise #message and alternate swipe without saving chat',async setup=>{
             const page=await setup(4);
             const writes=[],exports=[],searches=[];
