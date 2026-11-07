@@ -295,7 +295,7 @@ async function run() {
             await page.waitForFunction(()=>document.querySelectorAll('.stmn-chat-search-result').length===1);
             assert.match(await page.locator('.stmn-chat-search-result').textContent(),/#4/);
             assert.equal(await page.locator('.stmn-unified-search-more').isVisible(),false);
-            await page.getByRole('button',{name:'검색 닫기'}).click();
+            await page.getByRole('button',{name:'검색 닫기',exact:true}).click();
             assert.equal(await page.locator('.stmn-chat-search').isVisible(),false);
             assert.equal(await page.getByRole('tab',{name:'층 안내'}).getAttribute('aria-selected'),'true');
             assert.equal(await page.locator('.stmn-list').evaluate(e=>e.scrollTop),initialScroll);
@@ -315,7 +315,7 @@ async function run() {
             await page.getByRole('button',{name:'검색',exact:true}).click();
             await page.waitForFunction(()=>document.querySelectorAll('.stmn-chat-search-result').length>=1);
             assert.equal(await page.locator('.stmn-building-list').isVisible(),false);
-            await page.getByRole('button',{name:'검색 닫기'}).click();
+            await page.getByRole('button',{name:'검색 닫기',exact:true}).click();
             assert.equal(await page.locator('.stmn-building-list').isVisible(),true);
             assert.equal(await page.locator('.stmn-building-list').evaluate(e=>e.scrollTop),lobbyScroll);
             await page.locator('.stmn-building-card').nth(1).click();
@@ -901,6 +901,11 @@ async function run() {
             const ref=await page.evaluate(()=>window.__stmnView.elevator.libraryUI.data
                 .records['["character:none","chat-b"]'].imageRef);
             await second().locator('.stmn-chat-cover-thumb').waitFor({state:'visible'});
+            await page.waitForFunction(()=>{
+                const img=document.querySelectorAll('.stmn-library-card')[1]
+                    ?.querySelector('.stmn-chat-cover-thumb');
+                return img?.complete && img.naturalWidth>0;
+            });
             const thumb=await second().locator('.stmn-chat-cover-thumb').evaluate(img=>({
                 loaded:img.complete&&img.naturalWidth>0,
                 src:img.src,
@@ -1510,7 +1515,7 @@ async function run() {
             assert.equal(await page.locator('.stmn-unified-search-more').evaluate(x=>x.open),true);
             assert.equal(await page.getByRole('combobox',{name:'정밀 검색 대상 채팅'}).isVisible(),true);
             assert.equal(await page.locator('.stmn-unified-search-options').evaluate(x=>x.open),false);
-            await page.getByRole('button',{name:'검색 닫기'}).click();
+            await page.getByRole('button',{name:'검색 닫기',exact:true}).click();
             assert.equal(await page.locator('.stmn-unified-search-more').isVisible(),false);
             assert.equal(await page.getByRole('tab',{name:'층 안내'}).getAttribute('aria-selected'),'true');
         });
