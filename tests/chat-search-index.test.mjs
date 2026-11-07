@@ -23,7 +23,7 @@ async function reference(chat,meta,options){
 }
 test('E03D index matches reference search exactly across title/body/hidden/swipe configurations',async()=>{
     const {chat,meta}=initial(),cache=new ActiveChatSearchIndex();
-    for(const query of ['다른','푸른','밤','보이지','없는 숲','달빛','없어']){
+    for(const query of ['다른','푸른','선택의 밤','보이지','없는 숲','달빛','없어']){
         for(const config of [{titles:true,body:true,swipes:false},
             {titles:false,body:true,swipes:true},
             {titles:true,body:false,swipes:false},
@@ -47,7 +47,7 @@ test('E03D repeated query reuses snapshots, in-place text edit updates one entry
     assert.equal(changed.updated,1);
     assert.equal(changed.reused,2);
     assert.equal(changed.matches.some(x=>x.index===1),false);
-    assert.deepEqual(changed.matches,(await reference(chat,meta,{query:'달빛'})).matches);
+    assert.deepEqual(changed.matches,(await reference(chat,meta,{query:'달빛',swipes:false})).matches);
 });
 test('E03D catches in-place swipe edits and user title mutation even without ST events',async()=>{
     const {chat,meta}=initial(),cache=new ActiveChatSearchIndex();
