@@ -932,7 +932,8 @@ export function installSettings(context, settings, onChange, diagnostics, backup
     side.value = settings.side;
     side.addEventListener('change', () => onChange('side', side.value));
     inner.append(themeLabel, themeSelect, skyLabel, skySelect, buttonToggleLabel, buttonToggleHint, modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
-    installDiagnosticsSettings(inner, settings, onChange, diagnostics);
+    installDiagnosticsSettings(inner, settings, onChange, diagnostics,
+        () => window.SillyTavern?.getContext?.() || context);
     installSettingsBackupUI(inner, backupCallbacks || {});
     installLibraryBackupUI(inner, libraryCallbacks || {});
     installCoverArchiveUI(inner, libraryCallbacks || {});
