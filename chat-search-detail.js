@@ -61,6 +61,7 @@ export async function projectDetailedChatMatches(records,{
 export async function readDetailedChatMatches({
     context,scope,buildings,item,query,
     titles=true,body=true,swipes=true,signal,fetcher=fetch,
+    currentProjector,
 }={}){
     const ctx=context();
     normalizeSearchQuery(query);
@@ -86,7 +87,16 @@ export async function readDetailedChatMatches({
     let records;
     if(current){
         if(!Array.isArray(chatRef))throw new Error('현재 열려 있는 채팅 기록이 없습니다.');
-        // In-memory text is authoritative for edits not yet saved to disk.
+        // Reuse the bounded active-chat index only for an explicitly selected
+        // current file; inactive files keep their validated server path.
+        if(typeof currentProjector==='function'){
+            const result=await currentProjector(chatRef,ctx.chatMetadata||{},{
+                query,titles,body,swipes,signal,stillValid,
+                limit:SEARCH_MAX_RESULTS,
+            });
+            abortGuard(signal,stillValid);
+            return {id:target.id,source:'current-memory',...result};
+        }
         records=[{chat_metadata:ctx.chatMetadata||{}},...chatRef];
     }else{
         if(typeof ctx.getRequestHeaders!=='function')
