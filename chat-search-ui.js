@@ -187,7 +187,10 @@ export class ChatSearchUI{
                this.owner.view.root.dataset.elevatorTheme!=='quiet' ||
                !this.library.data || this.owner.scope!==scope)
                 return false;
+            const changedScope=this.lastScope!==undefined && this.lastScope!==scope;
             this.close();
+            if(changedScope)this.input.value='';
+            this.lastScope=scope;
             this.opened=true;
             this.scope=scope;
             const targets=selectLibraryChats(this.owner.buildings,scope,this.library.data,{
@@ -226,6 +229,7 @@ export class ChatSearchUI{
         this.serverButton.disabled=!this.body.checked;
         this.detailButton.disabled=!this.detailTargets.size;
         this.nextButton.hidden=true;
+        this.suggestion.hidden=true;
         this.status.textContent='검색을 중단했습니다. 새로 검색할 수 있습니다.';
     }
 
@@ -237,6 +241,7 @@ export class ChatSearchUI{
         this.offset=0;
         this.results=[];
         this.list.replaceChildren();
+        this.suggestion.hidden=true;
         this.searchButton.disabled=false;
         this.cancelButton.hidden=true;
         this.serverButton.disabled=!this.body.checked;
@@ -247,8 +252,10 @@ export class ChatSearchUI{
 
     close(){
         ++this.serial;
+        ++this.openSequence;
         this.controller?.abort();
         this.controller=null;
+        const wasOpen=this.opened;
         this.opened=false;
         this.scope=null;
         this.detailTargets.clear();
@@ -256,12 +263,15 @@ export class ChatSearchUI{
         this.offset=0;
         this.results=[];
         this.panel.hidden=true;
+        this.owner.view.root.dataset.stmnUnifiedSearch='closed';
         this.list.replaceChildren();
+        this.suggestion.hidden=true;
         this.nextButton.hidden=true;
         this.searchButton.disabled=false;
         this.cancelButton.hidden=true;
         this.serverButton.disabled=!this.body.checked;
         this.detailButton.disabled=true;
+        if(wasOpen)this.owner.quiet?.refresh();
     }
 
     invalidate(){this.close();}
@@ -299,7 +309,8 @@ export class ChatSearchUI{
                 group.append(row,exact);fragment.append(group);
             }else fragment.append(row);
         }
-        if(!this.results.length)fragment.append(make('p','','이 구간에는 일치하는 결과가 없습니다.'));
+        if(!this.results.length)fragment.append(make('p','',
+            '일치하는 결과가 없습니다. 다른 채팅이나 추가 검색을 이용해 보세요.'));
         this.list.replaceChildren(fragment);
     }
 
@@ -338,6 +349,7 @@ export class ChatSearchUI{
         this.serverButton.disabled=true;
         this.detailButton.disabled=true;
         this.cancelButton.hidden=false;
+        this.suggestion.hidden=true;
         this.nextButton.hidden=true;
         this.results=[];
         this.list.replaceChildren();
@@ -408,6 +420,7 @@ export class ChatSearchUI{
         this.controller=controller;
         this.searchButton.disabled=this.serverButton.disabled=this.detailButton.disabled=true;
         this.cancelButton.hidden=false;this.nextButton.hidden=true;
+        this.suggestion.hidden=true;
         this.results=[];this.list.replaceChildren();
         this.status.textContent='선택 채팅 정밀 검색 중… 최대 32MB에서 정확한 메시지 #번호를 확인합니다.';
         try{
@@ -421,6 +434,8 @@ export class ChatSearchUI{
                 return false;
             this.results=found.matches.map(match=>({...match,item}));
             this.offset=0;this.renderResults();
+            this.suggestion.textContent='다른 채팅도 검색하기';
+            this.suggestion.hidden=false;
             this.status.textContent='정밀 검색 '+item.name+' · '+
                 found.scanned.toLocaleString()+'/'+found.total.toLocaleString()+
                 '개 메시지 검사 · '+this.results.length+'개 위치'+
@@ -445,6 +460,75 @@ export class ChatSearchUI{
         }
     }
 
+    async searchCurrent(query){
+        const scope=this.scope,ctx=this.owner.callbacks.context();
+        if(!this.isValid(scope) || this.controller)return false;
+        const id=cleanChatId(ctx.chatId);
+        const item=this.detailTargets.get(id) || {id,name:id||'현재 채팅'};
+        if(!id || !Array.isArray(ctx.chat)){
+            this.status.textContent='열려 있는 채팅이 없습니다.';
+            return false;
+        }
+        const controller=new AbortController(),serial=++this.serial;
+        this.controller=controller;
+        this.searchButton.disabled=this.serverButton.disabled=this.detailButton.disabled=true;
+        this.cancelButton.hidden=false;
+        this.suggestion.hidden=true;
+        this.nextButton.hidden=true;
+        this.list.replaceChildren();
+        this.results=[];
+        this.status.textContent='현재 채팅에서 메시지를 확인하는 중…';
+        try{
+            const direct=/^#(\d+)$/.exec(query.trim());
+            if(direct){
+                const index=Number(direct[1]);
+                if(Number.isSafeInteger(index) && index>=0 && index<ctx.chat.length){
+                    this.results=[{item,index,type:'message',field:'number',
+                        title:getTitle(ctx.chat[index],ctx.chatMetadata||{}),
+                        excerpt:'메시지 번호 #'+index+'로 바로 이동'}];
+                }
+            }else{
+                const messages=[{chat_metadata:ctx.chatMetadata||{}},...ctx.chat];
+                const found=await projectDetailedChatMatches(messages,{
+                    query,titles:this.titles.checked,body:this.body.checked,
+                    swipes:this.swipeMain.checked,signal:controller.signal,
+                    stillValid:()=>this.isValid(scope) &&
+                        this.owner.callbacks.context().chat===ctx.chat &&
+                        cleanChatId(this.owner.callbacks.context().chatId)===id,
+                });
+                if(serial!==this.serial || controller.signal.aborted || !this.isValid(scope))
+                    return false;
+                this.results=found.matches.map(match=>({...match,item}));
+                this.status.textContent='현재 채팅 메시지 '+found.scanned+'/'+found.total+
+                    '개 확인 · 정확한 위치 '+this.results.length+'개'+
+                    (found.truncated?' · 첫 72개만 표시':'');
+            }
+            if(serial!==this.serial || controller.signal.aborted || !this.isValid(scope))
+                return false;
+            if(direct)this.status.textContent=this.results.length
+                ?'메시지 #'+this.results[0].index+' 위치를 찾았습니다.'
+                :'그 번호의 메시지가 없습니다.';
+            this.offset=0;
+            this.renderResults();
+            this.suggestion.textContent='다른 채팅에서도 찾아보기';
+            this.suggestion.hidden=false;
+            return true;
+        }catch(error){
+            if(serial===this.serial && this.isValid(scope))
+                this.status.textContent=aborted(error)?'검색이 취소되었습니다.':
+                    '현재 채팅 검색 오류: '+(error?.message||'확인 불가');
+            return false;
+        }finally{
+            if(this.controller===controller){
+                this.controller=null;
+                this.searchButton.disabled=false;
+                this.serverButton.disabled=!this.body.checked;
+                this.detailButton.disabled=!this.detailTargets.size;
+                this.cancelButton.hidden=true;
+            }
+        }
+    }
+
     async search(next=false){
         if(!this.opened || this.controller || this.owner.busy)return false;
         const scope=this.scope;
@@ -452,6 +536,7 @@ export class ChatSearchUI{
         let query;
         try{query=normalizeSearchQuery(this.input.value);}
         catch(error){this.status.textContent=error.message;return false;}
+        if(this.range==='current')return this.searchCurrent(query);
         const config={meta:this.meta.checked,titles:this.titles.checked,body:this.body.checked};
         if(!Object.values(config).some(Boolean)){
             this.status.textContent='최소 하나의 검색 범위를 선택하세요.';
@@ -473,9 +558,11 @@ export class ChatSearchUI{
         this.serverButton.disabled=true;
         this.detailButton.disabled=true;
         this.cancelButton.hidden=false;
+        this.suggestion.hidden=true;
         this.nextButton.hidden=true;
-        this.results=[];
+        if(!next)this.results=[];
         this.list.replaceChildren();
+        this.suggestion.hidden=true;
         let failures=0;
         let truncated=0;
         let processed=0;
@@ -534,6 +621,8 @@ export class ChatSearchUI{
                 (truncated?' · '+truncated+'개 결과 표시 제한':'')+
                 (remaining?' · 다음 구간을 검색할 수 있습니다.':' · 검색 종료');
             this.nextButton.hidden=!remaining;
+            this.suggestion.textContent='대용량 채팅도 찾아보기';
+            this.suggestion.hidden=false;
             return true;
         }catch(error){
             if(serial===this.serial && this.isValid(scope)){
