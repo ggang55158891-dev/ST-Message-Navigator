@@ -1,7 +1,8 @@
 /** E-03A Quiet opt-in search panel. Never scans on panel open. */
 import {buildingScope,cleanChatId} from './building-data.js';
 import {selectLibraryChats} from './library-operations.js';
-import {readDetailedChatMatches} from './chat-search-detail.js';
+import {readDetailedChatMatches,projectDetailedChatMatches} from './chat-search-detail.js';
+import {getTitle} from './model.js';
 import {
     SEARCH_BATCH_SIZE,SEARCH_MAX_RESULTS,metadataMatches,normalizeSearchQuery,
     projectChatMatches,readChatMatches,searchServerBodyCandidates,
@@ -38,13 +39,16 @@ export class ChatSearchUI{
         this.offset=0;
         this.results=[];
         this.detailTargets=new Map();
+        this.range='all';
+        this.openSequence=0;
+        this.opening=false;
 
         this.panel=make('section','stmn-chat-search');
         this.panel.hidden=true;
         this.panel.setAttribute('role','region');
         this.panel.setAttribute('aria-label','현재 채팅 범위 통합 검색');
         const header=make('div','stmn-chat-search-header');
-        header.append(make('strong','','통합 검색 · 현재 캐릭터/그룹'));
+        header.append(make('strong','','검색'));
         this.closeButton=button('×','stmn-chat-search-close',()=>this.close());
         this.closeButton.setAttribute('aria-label','통합 검색 닫기');
         header.append(this.closeButton);
@@ -53,15 +57,28 @@ export class ChatSearchUI{
         this.input=make('input','stmn-chat-search-input');
         this.input.type='search';
         this.input.maxLength=100;
-        this.input.placeholder='파일명 · 설명 · 메시지 제목 · 대사';
+        this.input.placeholder='찾을 대사나 채팅 이름 입력';
         this.input.setAttribute('aria-label','통합 검색어');
         this.input.autocomplete='off';
+        this.rangeRow=make('div','stmn-unified-search-range');
+        this.currentButton=button('현재 채팅','stmn-unified-search-range-button',()=>this.setRange('current'));
+        this.allButton=button('전체 채팅','stmn-unified-search-range-button',()=>this.setRange('all'));
+        this.currentButton.title='지금 열어 둔 대화의 모든 메시지를 검색합니다.';
+        this.allButton.title='현재 캐릭터 또는 그룹에 연결된 채팅들을 검색합니다.';
+        this.rangeRow.append(this.currentButton,this.allButton);
+        this.rangeHint=make('p','stmn-unified-search-hint','');
+        this.options=make('details','stmn-unified-search-options');
+        this.options.append(make('summary','','검색 옵션'));
         const scopes=make('div','stmn-chat-search-scopes');
         const meta=checked('파일명·설명·폴더·태그',true);
+        this.metaWrapper=meta.wrapper;
         const title=checked('메시지 제목',true);
         const body=checked('메시지 본문',true);
         this.meta=meta.box;this.titles=title.box;this.body=body.box;
-        scopes.append(meta.wrapper,title.wrapper,body.wrapper);
+        const swipeMain=checked('다른 스와이프의 답변',false);
+        this.swipeMain=swipeMain.box;
+        scopes.append(meta.wrapper,title.wrapper,body.wrapper,swipeMain.wrapper);
+        this.options.append(scopes);
         this.searchButton=button('검색','stmn-chat-search-start',()=>{});
         this.searchButton.type='submit';
         this.serverButton=button('대용량 본문 후보 찾기 · 서버 검색',
@@ -78,66 +95,126 @@ export class ChatSearchUI{
             'stmn-chat-search-detail',()=>void this.searchDetailed());
         this.detailButton.title='한 채팅만 검사하고 사용자 제목, 현재 대사, 대체 스와이프를 정확한 #번호로 찾습니다. 원문은 보관하지 않습니다.';
         this.detailRow.append(targetLabel,includeSwipes.wrapper,this.detailButton);
+        this.moreSearch=make('details','stmn-unified-search-more');
+        this.moreSearch.append(make('summary','','더 찾아보기 · 대용량/정밀 검색'));
+        this.moreHelp=make('p','stmn-unified-search-help',
+            '일반 검색은 채팅을 12개씩 확인합니다. 대용량 후보 찾기는 메시지 번호 없이 채팅만 찾고, 정밀 검색은 선택한 채팅 1개의 정확한 #번호를 찾습니다.');
+        this.moreSearch.append(this.moreHelp,this.serverButton,this.detailRow);
         this.cancelButton=button('중단','stmn-chat-search-cancel',()=>this.cancel());
         this.cancelButton.hidden=true;
-        this.form.append(this.input,scopes,this.searchButton,this.serverButton,
-            this.detailRow,this.cancelButton);
+        this.form.append(this.input,this.rangeRow,this.rangeHint,
+            this.searchButton,this.options,this.moreSearch,this.cancelButton);
         this.form.addEventListener('submit',event=>{
             event.preventDefault();void this.search(false);
         });
-        for(const input of [this.input,this.meta,this.titles,this.body,this.detailSwipes,this.targetSelect]){
+        for(const input of [this.input,this.meta,this.titles,this.body,this.swipeMain,this.detailSwipes,this.targetSelect]){
             input.addEventListener('input',()=>{
                 this.resetResults();
                 this.serverButton.disabled=!this.body.checked;
                 this.detailButton.disabled=!this.detailTargets.size;
             });
         }
+        this.suggestion=button('다른 채팅에서도 찾아보기',
+            'stmn-unified-search-suggestion',()=>this.suggestMore());
+        this.suggestion.hidden=true;
         this.status=make('p','stmn-chat-search-status','');
         this.status.setAttribute('role','status');
         this.list=make('div','stmn-chat-search-results');
         this.list.setAttribute('role','list');
         this.nextButton=button('다음 12개 채팅 검색','stmn-chat-search-next',()=>void this.search(true));
         this.nextButton.hidden=true;
-        this.panel.append(header,this.form,this.status,this.list,this.nextButton);
-        this.owner.contentArea.prepend(this.panel);
+        this.panel.append(header,this.form,this.status,this.list,this.nextButton,this.suggestion);
+        // A single third-level view, independent of the floor/lobby DOM.
+        // Existing lists keep their native scroll positions while it is open.
+        this.owner.view.footer.before(this.panel);
+        this.setRange('all');
     }
 
     isValid(scope){
         return this.opened && this.panel.isConnected && !this.panel.hidden &&
-            this.owner.tab==='buildings' &&
             this.owner.view.root.dataset.elevatorTheme==='quiet' &&
             this.owner.scope===scope &&
             buildingScope(this.owner.callbacks.context())===scope;
     }
 
-    open(){
-        const scope=this.owner.scope;
-        if(this.owner.busy || !scope || !this.library.data ||
-           this.owner.tab!=='buildings' ||
-           this.owner.view.root.dataset.elevatorTheme!=='quiet' ||
-           buildingScope(this.owner.callbacks.context())!==scope)return false;
-        this.close();
-        this.opened=true;
-        this.scope=scope;
-        // In-memory filename list only; NEVER download bodies on open.
-        const targets=selectLibraryChats(this.owner.buildings,scope,this.library.data,{
-            view:'all',query:'',sort:'name',
-        }).slice(0,3000);
-        this.detailTargets=new Map(targets.map(item=>[cleanChatId(item.id),item]));
-        this.targetSelect.replaceChildren();
-        for(const item of targets){
-            const opt=make('option','',item.alias||item.name||item.id);
-            opt.value=cleanChatId(item.id);
-            this.targetSelect.append(opt);
+    setRange(value){
+        if(value!=='current' && value!=='all')return;
+        if(this.opened && this.controller)this.resetResults();
+        const changed=this.range!==value;
+        this.range=value;
+        this.currentButton.setAttribute('aria-pressed',String(value==='current'));
+        this.allButton.setAttribute('aria-pressed',String(value==='all'));
+        this.metaWrapper.hidden=value==='current';
+        this.moreSearch.hidden=value==='current';
+        if(value==='current')this.moreSearch.open=false;
+        this.rangeHint.textContent=value==='current'
+            ?'지금 열려 있는 대화에서 메시지 위치를 찾습니다.'
+            :'현재 캐릭터·그룹에 있는 채팅 이름과 대사를 찾습니다.';
+        if(changed && this.opened){
+            this.resetResults();
+            this.status.textContent=value==='current'
+                ?'현재 채팅에서 검색할 내용을 입력하세요.'
+                :'전체 채팅 검색은 12개씩 확인합니다. 큰 채팅은 추가 검색을 이용하세요.';
         }
-        const current=cleanChatId(this.owner.callbacks.context().chatId);
-        if(this.detailTargets.has(current))this.targetSelect.value=current;
-        this.detailButton.disabled=!this.detailTargets.size;
-        this.panel.hidden=false;
-        this.status.textContent='검색어를 입력하고 검색을 누르세요. 본문은 버튼을 누를 때만 12개씩 조회합니다.';
-        this.input.focus();
-        this.panel.scrollIntoView?.({block:'nearest'});
-        return true;
+    }
+
+    suggestMore(){
+        if(this.range==='current'){
+            this.setRange('all');
+            this.input.focus({preventScroll:true});
+        }else{
+            this.moreSearch.open=true;
+            this.moreSearch.querySelector('summary')?.focus({preventScroll:true});
+        }
+    }
+
+    async open(preferred='all'){
+        const ctx=this.owner.callbacks.context(),scope=buildingScope(ctx);
+        if(this.opening || this.opened || this.owner.busy || !scope ||
+            this.owner.view.root.dataset.elevatorTheme!=='quiet')return false;
+        const serial=++this.openSequence;
+        this.opening=true;
+        try{
+            // Starting from Floors must work even before the lobby was visited.
+            // Refresh only metadata; do not fetch message bodies until Search.
+            if(this.owner.scope!==scope || !this.library.data ||
+               !this.owner.buildings.length){
+                this.owner.view.setStatus('검색 대상 채팅 목록을 준비하고 있습니다…');
+                await this.owner.refreshBuildings(true);
+            }
+            if(serial!==this.openSequence ||
+               buildingScope(this.owner.callbacks.context())!==scope ||
+               this.owner.view.root.dataset.elevatorTheme!=='quiet' ||
+               !this.library.data || this.owner.scope!==scope)
+                return false;
+            this.close();
+            this.opened=true;
+            this.scope=scope;
+            const targets=selectLibraryChats(this.owner.buildings,scope,this.library.data,{
+                view:'all',query:'',sort:'name',
+            }).slice(0,3000);
+            this.detailTargets=new Map(targets.map(item=>[cleanChatId(item.id),item]));
+            this.targetSelect.replaceChildren();
+            for(const item of targets){
+                const opt=make('option','',item.alias||item.name||item.id);
+                opt.value=cleanChatId(item.id);
+                this.targetSelect.append(opt);
+            }
+            const current=cleanChatId(this.owner.callbacks.context().chatId);
+            if(this.detailTargets.has(current))this.targetSelect.value=current;
+            this.detailButton.disabled=!this.detailTargets.size;
+            this.panel.hidden=false;
+            this.owner.view.root.dataset.stmnUnifiedSearch='open';
+            this.options.open=false;this.moreSearch.open=false;
+            this.setRange(preferred==='current'?'current':'all');
+            this.suggestion.hidden=true;
+            this.status.textContent='검색어를 입력하고 Enter 또는 검색 버튼을 누르세요.';
+            this.input.focus({preventScroll:true});
+            this.owner.quiet?.refresh();
+            return true;
+        }finally{
+            this.opening=false;
+        }
     }
 
     cancel(){
