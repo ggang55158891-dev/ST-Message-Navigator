@@ -1625,7 +1625,9 @@ async function run() {
             await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-status')?.textContent.includes('제한'));
             assert.equal(requests,1);
             assert.equal(await page.locator('.stmn-chat-search-result').count(),0);
-            await page.getByRole('tab',{name:'층 안내'}).click();
+            // The unified search hides background tabs; simulate a navigation
+            // event to verify cancellation without clicking hidden controls.
+            await page.evaluate(()=>window.__stmnView.elevator.setTab('floors'));
             assert.equal(await page.locator('.stmn-chat-search').isVisible(),false);
             assert.equal(await page.locator('.stmn-chat-search-result').count(),0);
         });
@@ -1769,7 +1771,9 @@ async function run() {
             await page.getByRole('button',{name:'검색 열기'}).click();
             await page.getByRole('searchbox',{name:'통합 검색어'}).fill('사과');
             await page.getByRole('button',{name:'검색',exact:true}).click();
-            await page.getByRole('tab',{name:'층 안내'}).click();
+            // The unified search hides background tabs; simulate a navigation
+            // event to verify cancellation without clicking hidden controls.
+            await page.evaluate(()=>window.__stmnView.elevator.setTab('floors'));
             await page.waitForTimeout(600);
             assert.equal(await page.locator('.stmn-chat-search').isVisible(),false);
             assert.equal(await page.locator('.stmn-chat-search-result').count(),0);
