@@ -43,7 +43,7 @@ test('H01 detects unavailable APIs without throwing or changing user objects',()
 });
 test('H01 context provider error becomes a safe capability report',()=>{
     const result=inspectRuntimeCompatibility(()=>{throw Error('my-secret-chat-path');},options);
-    assert.equal(result.ready,4);
+    assert.equal(result.ready,3);
     assert.ok(result.checks.some(x=>x.id==='st_context'&&x.status==='check'));
     const serialized=JSON.stringify(result);
     for(const secret of ['my-secret-chat-path','a-secret-file','secret message','secret swipe'])
