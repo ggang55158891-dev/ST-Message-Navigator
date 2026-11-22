@@ -2461,3 +2461,18 @@
 :is(button,summary,input,select,textarea):focus-visible{
     outline:2px solid var(--stmn-theme-link);outline-offset:2px;
 }
+
+/* Message tooltip portal lives outside #stmn-root. Match its theme explicitly. */
+body > .stmn-quiet-tooltip:is(
+  [data-stmn-tooltip-theme="quiet-dark"],
+  [data-stmn-tooltip-theme="classic"],
+  [data-stmn-tooltip-theme="restricted"],
+  [data-stmn-tooltip-theme="sky"][data-stmn-tooltip-sky="night"]) {
+    background:#232a32;color:#ecf0f5;border-color:#526171;
+}
+body > .stmn-quiet-tooltip[data-stmn-tooltip-theme="restricted"]{
+    background:#342622;color:#f3e8e1;border-color:#74534a;
+}
+body > .stmn-quiet-tooltip[data-stmn-tooltip-theme="sky"][data-stmn-tooltip-sky="day"]{
+    background:#f2faff;color:#213e58;border-color:#9bbbd0;
+}
