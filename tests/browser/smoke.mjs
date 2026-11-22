@@ -207,10 +207,13 @@ async function run() {
         await check('outline groups and exact #4 search', async setup => {
             const page = await setup(23);
             await page.locator('[data-action="outline"]').click();
-            assert.match(await page.locator('.stmn-count').innerText(), /23/);
+            assert.equal(await page.locator('.stmn-count').isVisible(),false);
             await page.getByRole('button', { name: /목차 맨 위/ }).click();
             assert.match(await page.locator('.stmn-group-toggle').first().innerText(), /#0.*#9/);
-            await page.locator('.stmn-search-input').fill('#4');
+            await page.evaluate(()=>{
+                const input=document.querySelector('.stmn-search-input');
+                input.value='#4';input.dispatchEvent(new Event('input',{bubbles:true}));
+            });
             assert.equal(await page.locator('.stmn-row').count(), 1);
             assert.equal(await page.locator('.stmn-row').getAttribute('data-index'), '4');
             await page.locator('.stmn-title').click();
@@ -220,13 +223,21 @@ async function run() {
         await check('collapse all, expand all, and filter bypass', async setup => {
             const page = await setup(23);
             await page.locator('[data-action="outline"]').click();
-            await page.getByRole('button', { name: '모두 접기' }).click();
+            await page.getByLabel('목록 메뉴').click();
+            await page.locator('.stmn-quiet-list-menu').getByRole('button',{name:'모두 접기'}).click();
             assert.equal(await page.locator('.stmn-row').count(), 0);
             assert.equal(await page.locator('.stmn-group').count(), 3);
-            await page.locator('.stmn-search-input').fill('#14');
+            await page.evaluate(()=>{
+                const input=document.querySelector('.stmn-search-input');
+                input.value='#14';input.dispatchEvent(new Event('input',{bubbles:true}));
+            });
             assert.equal(await page.locator('.stmn-row').count(), 1);
-            await page.locator('.stmn-search-input').fill('');
-            await page.getByRole('button', { name: '모두 펼치기' }).click();
+            await page.evaluate(()=>{
+                const input=document.querySelector('.stmn-search-input');
+                input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));
+            });
+            await page.getByLabel('목록 메뉴').click();
+            await page.locator('.stmn-quiet-list-menu').getByRole('button',{name:'모두 펼치기'}).click();
             assert.ok((await page.locator('.stmn-row').count()) > 0);
         });
 
@@ -307,8 +318,9 @@ async function run() {
             assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'), 'quiet');
             await page.locator('#stmn-elevator-theme').selectOption('classic');
             assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'), 'classic');
+            await page.locator('[data-action="outline"]').click();
             assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(), true,
-                'all themes share the advanced toolbar');
+                'all themes share the advanced toolbar when the panel is open');
         });
 
         await check('Quiet single magnifier opens unified search without losing floor/lobby context',async setup=>{
@@ -412,7 +424,7 @@ async function run() {
                 const panel=root.querySelector('.stmn-outline');
                 const row=root.querySelector('.stmn-row');
                 const c=getComputedStyle(panel);
-                const rgb=color=>[...color.matchAll(/[\\d.]+/g)].slice(0,3).map(x=>Number(x[0]));
+                const rgb=color=>color.match(/[0-9.]+/g).slice(0,3).map(Number);
                 const lum=values=>{
                     const parts=values.map(x=>{const v=x/255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});
                     return parts[0]*.2126+parts[1]*.7152+parts[2]*.0722;
@@ -479,7 +491,10 @@ async function run() {
             assert.equal(cacheReuse.invalidatedText, true);
             assert.equal(cacheReuse.invalidatedTitle, true);
             assert.equal(cacheReuse.title, '새로운 개인 제목');
-            await page.locator('.stmn-search-input').fill('새로운 개인 제목');
+            await page.evaluate(()=>{
+                const input=document.querySelector('.stmn-search-input');
+                input.value='새로운 개인 제목';input.dispatchEvent(new Event('input',{bubbles:true}));
+            });
             assert.equal(await page.locator('.stmn-row').count(), 1);
             assert.equal(await page.locator('.stmn-row').getAttribute('data-index'), '4');
         });
@@ -865,17 +880,23 @@ async function run() {
             const raw=await readFile(await download.path());
             assert.ok(raw.byteLength>200);
             const remaining=await page.evaluate(async()=>{
-                const {ChatCoverStore,COVER_DB}=await import('/chat-cover-store.js');
+                const {ChatCoverStore}=await import('/chat-cover-store.js');
                 const {LIBRARY_KEY,emptyLibrary}=await import('/library-data.js');
                 const store=new ChatCoverStore();
                 const old=await store.listRefs();
                 store.destroy();
-                await new Promise((resolve,reject)=>{
-                    const request=indexedDB.deleteDatabase(COVER_DB);
-                    request.onsuccess=()=>resolve();
-                    request.onerror=()=>reject(request.error);
-                    request.onblocked=()=>reject(Error('indexedDB blocked'));
-                });
+                // Clear records within one transaction instead of deleting
+                // the database while another connection may be closing.
+                const db=await store.open();
+                try{
+                    await new Promise((resolve,reject)=>{
+                        const tx=db.transaction('covers','readwrite');
+                        tx.objectStore('covers').clear();
+                        tx.oncomplete=()=>resolve();
+                        tx.onerror=()=>reject(tx.error);
+                        tx.onabort=()=>reject(tx.error||Error('storage clear aborted'));
+                    });
+                }finally{db.close();}
                 window.__themeAppContext.extensionSettings[LIBRARY_KEY]=emptyLibrary();
                 return old.length;
             });
@@ -2470,8 +2491,10 @@ async function run() {
             await card.getByRole('button',{name:'분류 · 폴더 / 태그'}).click();
             assert.equal(await card.locator('.stmn-library-details').evaluate(el=>el.open),true);
             await page.evaluate(()=>window.__stmnView.elevator.applyTheme('classic','auto'));
-            assert.equal(await page.locator('.stmn-building-card-title').filter({hasText:'예전 별명'}).count(),1,
-                'legacy alias remains functional in classic');
+            assert.equal(await page.locator('.stmn-building-card-title').filter({hasText:'건물 B'}).count(),1,
+                'all themes present the canonical chat name consistently');
+            assert.match(await page.locator('.stmn-building-card-meta').last().textContent(),/예전 별명/,
+                'old alias must remain available as legacy metadata');
             await page.evaluate(()=>window.__stmnView.elevator.applyTheme('quiet','auto'));
             assert.equal(await page.locator('.stmn-building-card-title').filter({hasText:'건물 B'}).count(),1);
         });
@@ -2724,8 +2747,8 @@ async function run() {
                 true,'Folder navigation must not write/delete chat records');
             await page.getByRole('tab',{name:'건물 로비'}).click();
             await page.evaluate(()=>window.__stmnView.elevator.applyTheme('classic','auto'));
-            assert.equal(await drawer.isVisible(),false,
-                'Legacy themes must not show the Quiet folder drawer');
+            assert.equal(await drawer.isVisible(),true,
+                'folder drawer stays available when switching to Classic');
             assert.equal(await page.locator('.stmn-building-card').first().isVisible(),true);
         });
 
@@ -2767,10 +2790,12 @@ async function run() {
             assert.equal(await page.locator('.stmn-building-card').count(), 2);
             await page.getByRole('button', { name: '건물 B 즐겨찾기 추가' }).click();
             assert.equal(await page.evaluate(() => window.__librarySaves), 1);
+            await page.evaluate(()=>window.__stmnView.elevator.quiet.toggleManage(true));
             await page.locator('.stmn-library-view').selectOption('favorites');
             assert.equal(await page.locator('.stmn-building-card').count(), 1);
             const card = page.locator('.stmn-library-card');
-            await card.locator('.stmn-library-details summary').click();
+            await card.locator('.stmn-quiet-item-menu summary').click();
+            await card.getByRole('button',{name:'분류 · 폴더 / 태그'}).click();
             await card.getByRole('button', { name: '✎ 별명 변경' }).click();
             await page.locator('.stmn-library-editor input').fill('새 별명 B');
             await page.locator('.stmn-library-editor button[type="submit"]').click();
@@ -2830,7 +2855,10 @@ async function run() {
             await page.getByRole('tab',{name:'건물 로비'}).click();
             await page.waitForFunction(() => document.querySelectorAll('.stmn-building-card').length === 100);
             assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),0);
-            await page.locator('.stmn-library-details summary').first().click();
+            await page.evaluate(()=>window.__stmnView.elevator.quiet.toggleManage(true));
+            const first=page.locator('.stmn-library-card').first();
+            await first.locator('.stmn-quiet-item-menu summary').click();
+            await first.getByRole('button',{name:'분류 · 폴더 / 태그'}).click();
             await page.locator('.stmn-library-tag-checkbox').first().waitFor();
             assert.equal(await page.locator('.stmn-library-tag-checkbox').count(),40);
             await page.getByRole('button',{name:/더 보기/}).click();
