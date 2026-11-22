@@ -2316,8 +2316,10 @@
 
 /* Shared visual roles: use CSS variables, not a second DOM implementation. */
 #stmn-root[data-stmn-ui="full"]:not([data-elevator-theme="quiet"]){
+    --stmn-bg:var(--stmn-theme-panel);
     --stmn-fg:var(--stmn-theme-ink);
     --stmn-border:var(--stmn-theme-line);
+    --stmn-accent:var(--stmn-theme-link);
 }
 #stmn-root[data-stmn-ui="full"]:not([data-elevator-theme="quiet"]) .stmn-outline {
     background:var(--stmn-theme-panel);
