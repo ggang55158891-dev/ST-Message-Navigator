@@ -307,7 +307,8 @@ async function run() {
             assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'), 'quiet');
             await page.locator('#stmn-elevator-theme').selectOption('classic');
             assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'), 'classic');
-            assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(), false);
+            assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(), true,
+                'all themes share the advanced toolbar');
         });
 
         await check('Quiet single magnifier opens unified search without losing floor/lobby context',async setup=>{
@@ -353,7 +354,84 @@ async function run() {
             await page.locator('.stmn-building-card').nth(1).click();
             await page.waitForFunction(()=>window.__stmnContext.chatId==='chat-b');
             await page.evaluate(()=>window.__stmnView.elevator.applyTheme('classic','auto'));
-            assert.equal(await page.locator('.stmn-search').isVisible(),true);
+            assert.equal(await page.locator('.stmn-search').isVisible(),false,
+                'the single search entry is common to every theme');
+        });
+
+        await check('v1.30 all five themes offer the same menus, preview, search and management controls',async setup=>{
+            const page=await setup(8);
+            await page.locator('[data-action="outline"]').click();
+            for(const theme of ['classic','restricted','sky','quiet','quiet-dark']){
+                await page.evaluate(name=>window.__stmnView.elevator.applyTheme(name,
+                    name==='sky'?'day':'auto'),theme);
+                const root=page.locator('#stmn-root');
+                assert.equal(await root.getAttribute('data-elevator-theme'),theme);
+                assert.equal(await root.getAttribute('data-stmn-ui'),'full');
+                assert.equal(await page.locator('.stmn-quiet-toolbar').isVisible(),true,theme);
+                assert.equal(await page.getByRole('button',{name:'검색 열기'}).count(),1);
+                assert.equal(await page.locator('.stmn-search-input').isVisible(),false);
+                const row=page.locator('.stmn-row[data-index="3"]');
+                await row.waitFor();
+                assert.equal(await row.locator('.stmn-quiet-message-menu summary').isVisible(),true,theme);
+                assert.equal(await row.locator('.stmn-quiet-bookmark').isVisible(),true,theme);
+                assert.equal(await row.locator('.stmn-quiet-message-action').count(),2,theme);
+                await row.locator('.stmn-quiet-message-menu summary').click();
+                assert.equal(await row.getByRole('button',{name:'메시지 숨기기'}).isVisible(),true,theme);
+                await page.keyboard.press('Escape');
+                await row.getByRole('button',{name:/내용 미리보기/}).first().click();
+                await page.locator('.stmn-quiet-message-preview').waitFor({state:'visible'});
+                await page.getByRole('button',{name:'미리보기 닫기'}).click();
+                await page.getByRole('button',{name:'검색 열기'}).click();
+                await page.locator('.stmn-chat-search').waitFor({state:'visible'});
+                await page.getByRole('searchbox',{name:'통합 검색어'}).fill('#3');
+                await page.getByRole('button',{name:'검색',exact:true}).click();
+                await page.waitForFunction(()=>document.querySelector('.stmn-chat-search-result strong')?.textContent.includes('#3'));
+                await page.getByRole('button',{name:'검색 닫기',exact:true}).click();
+                assert.equal(await page.locator('.stmn-chat-search').isVisible(),false);
+                await page.getByRole('tab',{name:'건물 로비'}).click();
+                await page.locator('.stmn-library-card').first().waitFor({state:'visible'});
+                assert.equal(await page.locator('.stmn-quiet-item-menu summary').first().isVisible(),true,theme);
+                assert.equal(await page.getByRole('button',{name:'폴더 탐색 열기'}).isVisible(),true,theme);
+                await page.locator('.stmn-quiet-item-menu summary').first().click();
+                assert.equal(await page.getByRole('button',{name:'채팅 파일 복제'}).first().isVisible(),true,theme);
+                await page.keyboard.press('Escape');
+                await page.getByRole('tab',{name:'층 안내'}).click();
+            }
+        });
+
+        await check('v1.30 minimal black palette stays dark and contrast-safe after a persisted theme change',async setup=>{
+            const page=await setup(2,undefined,true);
+            await page.locator('#stmn-settings > details > summary').click();
+            const select=page.locator('#stmn-elevator-theme');
+            assert.equal(await select.locator('option[value="quiet-dark"]').count(),1);
+            await select.selectOption('quiet-dark');
+            assert.equal(await page.locator('#stmn-root').getAttribute('data-elevator-theme'),'quiet-dark');
+            await page.locator('[data-action="outline"]').click();
+            const palette=await page.evaluate(()=>{
+                const root=document.querySelector('#stmn-root');
+                const panel=root.querySelector('.stmn-outline');
+                const row=root.querySelector('.stmn-row');
+                const c=getComputedStyle(panel);
+                const rgb=color=>[...color.matchAll(/[\\d.]+/g)].slice(0,3).map(x=>Number(x[0]));
+                const lum=values=>{
+                    const parts=values.map(x=>{const v=x/255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});
+                    return parts[0]*.2126+parts[1]*.7152+parts[2]*.0722;
+                };
+                return {background:c.backgroundColor,color:c.color,
+                    contrast:(lum(rgb(c.color))+.05)/(lum(rgb(c.backgroundColor))+.05),
+                    rowBg:row?getComputedStyle(row).backgroundColor:null,
+                    ui:root.dataset.stmnUi,
+                };
+            });
+            assert.equal(palette.ui,'full');
+            assert.equal(palette.background,'rgb(22, 25, 30)');
+            assert.ok(palette.contrast>=7,'body text must meet AAA contrast in minimal black');
+            await page.reload();
+            await bootSettingsApp(page);
+            await page.locator('#stmn-settings > details > summary').click();
+            assert.equal(await page.locator('#stmn-elevator-theme').inputValue(),'quiet-dark');
+            await select.selectOption('classic');
+            assert.equal(await page.locator('#stmn-root').getAttribute('data-stmn-ui'),'full');
         });
 
         await check('dragging moves nav without activating its button', async setup => {
