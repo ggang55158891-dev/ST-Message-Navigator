@@ -103,7 +103,7 @@ export class QuietShell {
     }
 
     get isQuiet() {
-        return this.root.dataset.elevatorTheme === 'quiet';
+        return this.root.dataset.stmnUi === 'full';
     }
 
     async toggleSearch(force) {
