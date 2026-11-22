@@ -878,7 +878,7 @@ export function installSettings(context, settings, onChange, diagnostics, backup
     themeSelect.id = 'stmn-elevator-theme';
     for (const [value, label] of [['classic', '클래식 · 금속 엘리베이터'],
         ['restricted', '금지된 층 · 낡은 엘리베이터'], ['sky', '스카이 리프트 · 투명 엘리베이터'],
-        ['quiet', 'Quiet · 미니멀 화이트 (실험)']]) {
+        ['quiet', 'Quiet · 미니멀 화이트'], ['quiet-dark', 'Quiet Dark · 미니멀 블랙']]) {
         const option = el('option', '', label);
         option.value = value;
         themeSelect.append(option);
