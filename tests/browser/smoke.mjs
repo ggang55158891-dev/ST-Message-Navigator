@@ -2799,11 +2799,13 @@ async function run() {
             await card.getByRole('button', { name: '✎ 별명 변경' }).click();
             await page.locator('.stmn-library-editor input').fill('새 별명 B');
             await page.locator('.stmn-library-editor button[type="submit"]').click();
-            assert.equal(await page.locator('.stmn-building-card-title').innerText(), '새 별명 B');
+            assert.equal(await page.locator('.stmn-building-card-title').innerText(), '건물 B');
+            assert.match(await card.locator('.stmn-building-card-meta').textContent(),/새 별명 B/);
             assert.equal(await page.evaluate(() => window.__stmnContext.chatId), 'chat-a');
 
             // Folder catalog is independent from SillyTavern chat paths.
-            await page.locator('.stmn-library-manage > summary').click();
+            if(!(await page.locator('.stmn-library-manage').evaluate(el=>el.open)))
+                await page.locator('.stmn-library-manage > summary').click();
             await page.locator('.stmn-library-toolbar').first().getByRole('button',{name:'+ 추가'}).click();
             await page.locator('.stmn-library-editor input').fill('작업 폴더');
             await page.locator('.stmn-library-editor button[type="submit"]').click();
@@ -2817,7 +2819,8 @@ async function run() {
             const detail = page.locator('.stmn-library-details');
             if (!(await detail.evaluate(el => el.open))) await detail.locator('summary').click();
             await page.locator('.stmn-library-tag-checkboxes').getByLabel('판타지').check();
-            assert.match(await page.locator('.stmn-building-card-title').innerText(), /새 별명 B/);
+            assert.match(await page.locator('.stmn-building-card-title').innerText(), /건물 B/);
+            assert.match(await card.locator('.stmn-building-card-meta').textContent(),/새 별명 B/);
             const saved = await page.evaluate(() => {
                 const settings = window.__stmnContext.extensionSettings;
                 const row = Object.values(settings.stmn_library_v1.records)[0];
