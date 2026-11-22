@@ -482,7 +482,7 @@ export class NavigatorView {
         const layout = buildOutlineRows(
             this.filtered, this.entries.length, this.groupCollapsed, Boolean(this.query),
         );
-        const extra = this.root.dataset.elevatorTheme === 'quiet'
+        const extra = this.root.dataset.stmnUi === 'full'
             ? withQuietPreview(layout.rows, this.expandedPreviewIndex)
             : {rows:layout.rows,totalHeight:0};
         this.displayRows = extra.rows;
@@ -551,7 +551,7 @@ export class NavigatorView {
             if (entry.message?.is_system === true) row.classList.add('stmn-hidden-message');
             if (this.currentIndex === entry.index) row.classList.add('stmn-current');
             const number = el('span', 'stmn-number', '#' + entry.index);
-            if (this.messageBatch?.selectionMode && this.root.dataset.elevatorTheme === 'quiet' &&
+            if (this.messageBatch?.selectionMode && this.root.dataset.stmnUi === 'full' &&
                 this.elevator.tab === 'floors') {
                 row.append(this.messageBatch.checkboxFor(entry.index,entry.message));
                 row.classList.toggle('stmn-message-batch-selected',this.messageBatch.selected.has(entry.index));
@@ -668,7 +668,7 @@ export class NavigatorView {
         eye.addEventListener('mouseenter', () => {
             this.hideQuietTooltip();
             this.tooltipTimer = setTimeout(() => {
-                if (!eye.isConnected || this.root.dataset.elevatorTheme !== 'quiet') return;
+                if (!eye.isConnected || this.root.dataset.stmnUi !== 'full') return;
                 this.showQuietTooltip(eye, entry);
             }, 240);
         });
@@ -678,7 +678,7 @@ export class NavigatorView {
     }
 
     showQuietTooltip(eye, entry) {
-        if (!eye.isConnected || this.root.dataset.elevatorTheme !== 'quiet') return;
+        if (!eye.isConnected || this.root.dataset.stmnUi !== 'full') return;
         this.hideQuietTooltip();
         const target = this.callbacks.context().chat?.[entry.index] || entry.message;
         if (!this.tooltip) {
@@ -712,7 +712,7 @@ export class NavigatorView {
      * Other-chat previews remain a separate Q-04 feature. */
     showQuietMessagePreview(entry) {
         this.hideQuietTooltip();
-        if (this.root.dataset.elevatorTheme !== 'quiet') return;
+        if (this.root.dataset.stmnUi !== 'full') return;
         if (this.expandedPreviewIndex === entry.index) {
             this.expandedPreviewIndex = null;
             this.previewSwipeIndex = null;
