@@ -186,7 +186,7 @@ export class LibraryLobby {
     /** Read-only current-scope folder explorer. Generates children only when
      * the user expands a section, with incremental 30-chat batches. */
     renderFolderDrawer() {
-        const quiet = this.owner.view.root.dataset.elevatorTheme === 'quiet';
+        const quiet = this.owner.view.root.dataset.stmnUi === 'full';
         const open = this.drawerOpen && quiet && this.owner.tab === 'buildings' && Boolean(this.data);
         this.folderDrawer.hidden = !open;
         this.owner.quiet?.refreshFolderButton();
@@ -369,7 +369,7 @@ export class LibraryLobby {
             return;
         }
         const fragment = document.createDocumentFragment();
-        const quiet = owner.view.root.dataset.elevatorTheme === 'quiet';
+        const quiet = owner.view.root.dataset.stmnUi === 'full';
         const selected = cleanChatId(owner.callbacks.context().chatId);
         for (const item of found.slice(0,this.visible)) {
             const current = selected === item.id;

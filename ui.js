@@ -482,7 +482,7 @@ export class NavigatorView {
         const layout = buildOutlineRows(
             this.filtered, this.entries.length, this.groupCollapsed, Boolean(this.query),
         );
-        const extra = this.root.dataset.elevatorTheme === 'quiet'
+        const extra = this.root.dataset.stmnUi === 'full'
             ? withQuietPreview(layout.rows, this.expandedPreviewIndex)
             : {rows:layout.rows,totalHeight:0};
         this.displayRows = extra.rows;
@@ -551,7 +551,7 @@ export class NavigatorView {
             if (entry.message?.is_system === true) row.classList.add('stmn-hidden-message');
             if (this.currentIndex === entry.index) row.classList.add('stmn-current');
             const number = el('span', 'stmn-number', '#' + entry.index);
-            if (this.messageBatch?.selectionMode && this.root.dataset.elevatorTheme === 'quiet' &&
+            if (this.messageBatch?.selectionMode && this.root.dataset.stmnUi === 'full' &&
                 this.elevator.tab === 'floors') {
                 row.append(this.messageBatch.checkboxFor(entry.index,entry.message));
                 row.classList.toggle('stmn-message-batch-selected',this.messageBatch.selected.has(entry.index));
@@ -668,7 +668,7 @@ export class NavigatorView {
         eye.addEventListener('mouseenter', () => {
             this.hideQuietTooltip();
             this.tooltipTimer = setTimeout(() => {
-                if (!eye.isConnected || this.root.dataset.elevatorTheme !== 'quiet') return;
+                if (!eye.isConnected || this.root.dataset.stmnUi !== 'full') return;
                 this.showQuietTooltip(eye, entry);
             }, 240);
         });
@@ -678,7 +678,7 @@ export class NavigatorView {
     }
 
     showQuietTooltip(eye, entry) {
-        if (!eye.isConnected || this.root.dataset.elevatorTheme !== 'quiet') return;
+        if (!eye.isConnected || this.root.dataset.stmnUi !== 'full') return;
         this.hideQuietTooltip();
         const target = this.callbacks.context().chat?.[entry.index] || entry.message;
         if (!this.tooltip) {
@@ -688,6 +688,8 @@ export class NavigatorView {
             this.onQuietTooltipScroll = () => this.hideQuietTooltip();
             this.list.addEventListener('scroll', this.onQuietTooltipScroll,{passive:true});
         }
+        this.tooltip.dataset.stmnTooltipTheme=this.root.dataset.elevatorTheme;
+        this.tooltip.dataset.stmnTooltipSky=this.root.dataset.elevatorSky;
         const text = messageTooltipText(target);
         const header = entry.index === this.entries.length - 1
             ? '마지막 메시지' : '#' + entry.index + ' · 메시지 미리보기';
@@ -712,7 +714,7 @@ export class NavigatorView {
      * Other-chat previews remain a separate Q-04 feature. */
     showQuietMessagePreview(entry) {
         this.hideQuietTooltip();
-        if (this.root.dataset.elevatorTheme !== 'quiet') return;
+        if (this.root.dataset.stmnUi !== 'full') return;
         if (this.expandedPreviewIndex === entry.index) {
             this.expandedPreviewIndex = null;
             this.previewSwipeIndex = null;
@@ -878,7 +880,7 @@ export function installSettings(context, settings, onChange, diagnostics, backup
     themeSelect.id = 'stmn-elevator-theme';
     for (const [value, label] of [['classic', '클래식 · 금속 엘리베이터'],
         ['restricted', '금지된 층 · 낡은 엘리베이터'], ['sky', '스카이 리프트 · 투명 엘리베이터'],
-        ['quiet', 'Quiet · 미니멀 화이트 (실험)']]) {
+        ['quiet', 'Quiet · 미니멀 화이트'], ['quiet-dark', 'Quiet Dark · 미니멀 블랙']]) {
         const option = el('option', '', label);
         option.value = value;
         themeSelect.append(option);
@@ -932,7 +934,8 @@ export function installSettings(context, settings, onChange, diagnostics, backup
     side.value = settings.side;
     side.addEventListener('change', () => onChange('side', side.value));
     inner.append(themeLabel, themeSelect, skyLabel, skySelect, buttonToggleLabel, buttonToggleHint, modeLabel, mode, sideLabel, side, el('p', 'stmn-settings-hint', '버튼을 드래그하면 다섯 버튼을 함께 옮기고 자동 저장합니다. 좌/우 위치를 다시 선택하면 기본 배치로 복원합니다. 중앙 버튼은 목차, 연필은 제목 수정입니다. 제목은 브랜치 생성 시 복제됩니다.'));
-    installDiagnosticsSettings(inner, settings, onChange, diagnostics);
+    installDiagnosticsSettings(inner, settings, onChange, diagnostics,
+        () => window.SillyTavern?.getContext?.() || context);
     installSettingsBackupUI(inner, backupCallbacks || {});
     installLibraryBackupUI(inner, libraryCallbacks || {});
     installCoverArchiveUI(inner, libraryCallbacks || {});

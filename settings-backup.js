@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 });
 export const SETTINGS_FIELDS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
 // One accepted theme list for live selections, initialization and backups.
-export const ELEVATOR_THEMES = Object.freeze(['classic', 'restricted', 'sky', 'quiet']);
+export const ELEVATOR_THEMES = Object.freeze(['classic', 'restricted', 'sky', 'quiet', 'quiet-dark']);
 const OPTIONS = Object.freeze({
     mode: ['visible', 'all'],
     side: ['left', 'right'],

@@ -86,7 +86,7 @@ export class MessageReorderUI{
     }
 
     floorVisible(){
-        return this.view.root.dataset.elevatorTheme==='quiet' &&
+        return this.view.root.dataset.stmnUi==='full' &&
             this.view.elevator.tab==='floors';
     }
     valid(){
