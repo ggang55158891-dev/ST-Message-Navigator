@@ -688,6 +688,8 @@ export class NavigatorView {
             this.onQuietTooltipScroll = () => this.hideQuietTooltip();
             this.list.addEventListener('scroll', this.onQuietTooltipScroll,{passive:true});
         }
+        this.tooltip.dataset.stmnTooltipTheme=this.root.dataset.elevatorTheme;
+        this.tooltip.dataset.stmnTooltipSky=this.root.dataset.elevatorSky;
         const text = messageTooltipText(target);
         const header = entry.index === this.entries.length - 1
             ? '마지막 메시지' : '#' + entry.index + ' · 메시지 미리보기';
