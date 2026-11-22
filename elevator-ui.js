@@ -105,27 +105,20 @@ export class ElevatorPanel {
         const skyModes = ['auto', 'day', 'night'];
         this.view.root.dataset.elevatorTheme = ELEVATOR_THEMES.includes(theme) ? theme : 'classic';
         this.view.root.dataset.elevatorSky = skyModes.includes(skyMode) ? skyMode : 'auto';
-        if (this.view.root.dataset.elevatorTheme !== 'quiet') {
-            this.libraryUI.previewUI.closeDetail();
-            this.libraryUI.fileActions.dismissOnNavigation();
-            this.libraryUI.searchUI.invalidate();
-        }
+        // Feature parity: all styles use the same tested Quiet UI/controller
+        // tree. Theme presets only change CSS, never chat or storage engines.
+        this.view.root.dataset.stmnUi = 'full';
         this.libraryUI.previewUI.hideTooltip();
-        if(this.view.reorderUI){
-            if(this.view.root.dataset.elevatorTheme!=='quiet')this.view.reorderUI.reset();
-            else this.view.reorderUI.update();
-        }
+        this.view.hideQuietTooltip?.();
+        this.view.reorderUI?.update();
+        this.view.messageBatch?.update();
         this.quiet?.refresh();
-        if (this.view.root.dataset.elevatorTheme !== 'quiet'){
-            this.view.singleActions?.close();
-            this.view.exclusiveMenus?.closeExcept(null);
-        }
-        if (this.view.messageBatch) {
-            if (this.view.root.dataset.elevatorTheme !== 'quiet')this.view.messageBatch.reset();
-            else this.view.messageBatch.update();
-        }
         if (this.tab === 'buildings' && this.libraryUI?.data && this.view.panelOpen) {
             this.libraryUI.draw();
+        }
+        // Repaint virtualized rows after switching styles; no data writes.
+        if (this.view.entries?.length && this.view.panelOpen) {
+            this.view.applyFilter({resetScroll:false});
         }
         this.updateFloor(this.view.currentIndex);
     }
@@ -137,7 +130,7 @@ export class ElevatorPanel {
             : context.characters?.[context.characterId];
         const name = cleanChatId(context.chatId);
         const legacyAlias = this.libraryUI?.getAlias(buildingScope(context), name);
-        this.buildingName.textContent = this.view.root.dataset.elevatorTheme === 'quiet'
+        this.buildingName.textContent = this.view.root.dataset.stmnUi === 'full'
             ? (name || selected?.name || '선택된 채팅 없음')
             : (legacyAlias || name || selected?.name || '선택된 채팅 없음');
         this.buildingName.title = name;

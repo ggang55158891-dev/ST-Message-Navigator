@@ -134,7 +134,7 @@ export class ChatSearchUI{
 
     isValid(scope){
         return this.opened && this.panel.isConnected && !this.panel.hidden &&
-            this.owner.view.root.dataset.elevatorTheme==='quiet' &&
+            this.owner.view.root.dataset.stmnUi==='full' &&
             this.owner.scope===scope &&
             buildingScope(this.owner.callbacks.context())===scope;
     }
@@ -173,7 +173,7 @@ export class ChatSearchUI{
     async open(preferred='all'){
         const ctx=this.owner.callbacks.context(),scope=buildingScope(ctx);
         if(this.opening || this.opened || this.owner.busy || !scope ||
-            this.owner.view.root.dataset.elevatorTheme!=='quiet')return false;
+            this.owner.view.root.dataset.stmnUi!=='full')return false;
         const serial=++this.openSequence;
         this.opening=true;
         try{
@@ -186,7 +186,7 @@ export class ChatSearchUI{
             }
             if(serial!==this.openSequence ||
                buildingScope(this.owner.callbacks.context())!==scope ||
-               this.owner.view.root.dataset.elevatorTheme!=='quiet' ||
+               this.owner.view.root.dataset.stmnUi!=='full' ||
                !this.library.data || this.owner.scope!==scope)
                 return false;
             const changedScope=this.lastScope!==undefined && this.lastScope!==scope;
