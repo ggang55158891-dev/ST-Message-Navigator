@@ -85,7 +85,7 @@ export function installDiagnosticsSettings(container, settings, onChange, diagno
     });
     download.addEventListener('click', () => {
         try {
-            const text = diagnostics.exportJSON({ extensionVersion: '1.29.0' });
+            const text = diagnostics.exportJSON({ extensionVersion: '1.30.0' });
             const url = URL.createObjectURL(new Blob([text], { type: 'application/json;charset=utf-8' }));
             const link = document.createElement('a');
             link.href = url;
