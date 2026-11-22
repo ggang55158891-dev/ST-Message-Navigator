@@ -124,3 +124,12 @@ test('title metadata audit tolerates missing or malformed existing metadata', ()
     assert.equal(inspectTitleMetadata([], {stmn_message_outline_v1:{titles:[]}}).malformedStore, true);
     assert.equal(inspectTitleMetadata([], {stmn_message_outline_v1:'invalid'}).malformedStore, true);
 });
+
+test('minimal black theme survives settings normalization and JSON backup/restore', () => {
+    const dark = { ...DEFAULT_SETTINGS, elevatorTheme: 'quiet-dark' };
+    const backup = createSettingsBackup(dark, {version:'1.30.0'});
+    const restored = parseSettingsBackup(backup);
+    assert.equal(normalizeSettings(dark).elevatorTheme,'quiet-dark');
+    assert.equal(restored.settings.elevatorTheme,'quiet-dark');
+    assert.equal(normalizeSettings({elevatorTheme:'unknown'}).elevatorTheme,'classic');
+});
